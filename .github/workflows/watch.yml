@@ -7,6 +7,9 @@ name: Watch for cancellations
 on:
   schedule:
     - cron: '*/20 * * * *'
+  push:
+    branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
+    paths: ['src/**', '.github/workflows/watch.yml']
   workflow_dispatch:
 
 # Separate from the snipe group: a watch tick must never queue behind a
