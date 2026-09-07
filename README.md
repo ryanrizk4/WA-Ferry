@@ -126,6 +126,10 @@ Things learned the hard way, recorded so they are not relearned:
   is WSF's wording for sold out with more space coming.
 - After a search, "Show Availability" becomes "Refresh", which re-runs the same
   query in one postback.
+- **The page cannot be deep-linked.** Every query-parameter shape was ignored:
+  the terminals come back as -1 and no grid renders. There is no URL that
+  lands someone on a filled-in sailing list, which is why the run warns a
+  human early enough to set the form up by hand before the release.
 - **Notification titles must be plain ASCII.** ntfy takes the title as an HTTP
   header, headers carry bytes rather than text, and one em dash threw
   `Cannot convert argument to a ByteString` before the request was sent. No
