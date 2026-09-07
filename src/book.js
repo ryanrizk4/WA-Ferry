@@ -79,14 +79,10 @@ async function main() {
   // does mean booking will not complete, so say so loudly.
   const auth = await flow.login(page, process.env.WSF_EMAIL, process.env.WSF_PASSWORD);
   log(`login: ${auth.ok ? 'OK' : 'FAILED'} — ${auth.reason}`);
-  if (!auth.ok && !DRY_RUN) {
-    await notify({
-      title: 'WSF login failed — the bot cannot book',
-      body: `${auth.reason}\n\nCheck the WSF_EMAIL and WSF_PASSWORD repository secrets. `
-        + `Until this is fixed the run can see space but cannot take it.`,
-      priority: 'high',
-    });
-  }
+  // Deliberately not notifying here. The watch runs every twenty minutes and
+  // usually finds nothing, so a broken login would otherwise fire an alert on
+  // every run for days. It only matters at the moment there is something to
+  // take, so it is folded into the message sent then.
 
   // Load the search form and set everything that does not change, so the
   // moment the release lands we are one postback away from an answer.
@@ -154,6 +150,7 @@ async function main() {
             body: `Space opened on the ${pick.depart} sailing from ${trip.from.name} to `
               + `${trip.to.name} on ${pick.date} (${pick.label}), vessel ${pick.vessel}.\n\n`
               + `${result.reason}. You need to finish this by hand, and fast:\n\n`
+              + (auth.ok ? '' : `(Note: sign-in also failed — ${auth.reason})\n\n`)
               + `https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx\n\n`
               + `Orcas Island to Anacortes, ${pick.date}, vehicle under 22 feet, up to 7'2" tall. `
               + `Pick the ${pick.depart} sailing.`,
@@ -167,7 +164,8 @@ async function main() {
           await notify({
             title: 'Space appeared but booking failed — go do it by hand now',
             body: `Saw ${pick.spacesText} on ${pick.date} ${pick.depart} but could not complete `
-              + `the reservation after ${attempts} attempts.\n\nLast error: ${result.reason}\n\n`
+              + `the reservation after ${attempts} attempts.\n\nLast error: ${result.reason}\n`
+              + (auth.ok ? '' : `Sign-in also failed: ${auth.reason}\n`) + `\n`
               + `Book manually: https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx`,
             priority: 'high',
           });

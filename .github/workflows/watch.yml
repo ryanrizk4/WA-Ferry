@@ -5,15 +5,15 @@ name: Watch for cancellations
 # be useful, loose enough to stay polite to a public agency's servers and
 # inside the Actions minutes budget on a private repo.
 on:
-  # Armed once the booker is verified end to end. Left disabled until then so
-  # it does not fire every 20 minutes against a script that is not ready.
-  # schedule:
-  #   - cron: '*/20 * * * *'
+  schedule:
+    - cron: '*/20 * * * *'
   workflow_dispatch:
 
+# Separate from the snipe group: a watch tick must never queue behind a
+# 40-minute snipe run, and a superseded tick is worth nothing.
 concurrency:
-  group: wsf-booking
-  cancel-in-progress: false
+  group: wsf-watch
+  cancel-in-progress: true
 
 jobs:
   watch:
