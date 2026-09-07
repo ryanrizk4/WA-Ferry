@@ -298,6 +298,7 @@ async function main() {
   // Which sailing the phone is currently being alarmed about, and when.
   let alertedKey = null;
   let lastAlertMs = 0;
+  let firstSeenMs = 0;
   try {
     do {
       pass += 1;
@@ -332,7 +333,13 @@ async function main() {
         // stops buzzing about a chance that has passed, and let the next find
         // start a fresh alarm.
         if (alertedKey) {
-          log(`the space alerted about is gone; calling off the repeats`);
+          // How long the space actually lasted. This is the number the whole
+          // design turns on and it has never been measured: if returned space
+          // typically sits for several minutes there is time to book by hand,
+          // and if it evaporates in under a minute there mostly is not.
+          const heldMs = Date.now() - firstSeenMs;
+          log(`SPACE GONE: ${alertedKey} was open for ${humanDuration(heldMs)} `
+            + `(first seen ${new Date(firstSeenMs).toISOString()})`);
           callOffRepeats();
           alertedKey = null;
         }
@@ -352,13 +359,16 @@ async function main() {
         const fresh = key !== alertedKey;
         const stale = now - lastAlertMs > limits.realertGapMs;
         if (!fresh && !stale) {
-          log(`pass ${pass}: ${key} still open, alerted `
-            + `${humanDuration(now - lastAlertMs)} ago; not repeating yet`);
+          log(`pass ${pass}: ${key} still open, ${humanDuration(now - firstSeenMs)} `
+            + `since first seen; last alert ${humanDuration(now - lastAlertMs)} ago`);
           if (Date.now() >= deadline) break;
           await sleep(MODE === 'watch' ? watchPollMs() : limits.sprintPollMs);
           continue;
         }
-        if (fresh) resumeRepeats();
+        if (fresh) {
+          resumeRepeats();
+          firstSeenMs = now;
+        }
         alertedKey = key;
         lastAlertMs = now;
         log(`pass ${pass}: SPACE FOUND — ${pick.date} ${pick.depart} (${pick.label}), ${pick.spacesText}`);
