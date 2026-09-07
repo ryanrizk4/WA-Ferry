@@ -31,8 +31,17 @@ export const trip = {
       earliest: '16:00',
       latest: '23:59',
     },
+    {
+      label: 'Late Monday (last resort)',
+      date: '2026-09-14',
+      earliest: '11:01',
+      latest: '23:59',
+    },
   ],
 };
+
+// Nothing to do after this; the watch stops rather than polling forever.
+export const stopAfter = '2026-09-14T23:59:00';
 
 // When WSF drops new inventory. Their published rule for the Anacortes/San
 // Juan Islands route, in three phases:

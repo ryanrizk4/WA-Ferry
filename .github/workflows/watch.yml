@@ -1,12 +1,13 @@
 name: Watch for cancellations
 
-# Between release waves, space reappears when other people cancel. This is the
-# net that catches those. Interval is a deliberate compromise: tight enough to
-# be useful, loose enough to stay polite to a public agency's servers and
-# inside the Actions minutes budget on a private repo.
+# Between release waves, space reappears when other people cancel, and it does
+# not last: a sailing seen open on one check was gone six minutes later. Every
+# fifteen minutes is the compromise — tight enough to catch those, loose enough
+# to stay polite to a public agency's servers and to fit the Actions minutes
+# budget on a private repo (roughly 100 runs a day).
 on:
   schedule:
-    - cron: '*/20 * * * *'
+    - cron: '*/15 * * * *'
   push:
     branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
     paths: ['src/**', '.github/workflows/watch.yml']
@@ -23,6 +24,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     permissions:
+      # Naming any permission replaces the whole default set, so contents:read
+      # has to be restated or checkout cannot clone this private repo.
+      contents: read
       issues: write
     steps:
       - uses: actions/checkout@v4

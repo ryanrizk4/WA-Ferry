@@ -15,8 +15,9 @@
 
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
-import { trip, releases, limits } from './config.js';
+import { trip, releases, limits, stopAfter } from './config.js';
 import { nowPT, msUntil, humanDuration } from './lib/time.js';
+import { alreadyBooked } from './lib/state.js';
 import { notify } from './lib/notify.js';
 
 const MODE = process.env.MODE === 'snipe' ? 'snipe' : 'watch';
@@ -40,6 +41,21 @@ function currentRelease() {
 
 async function main() {
   log(`mode=${MODE} dryRun=${DRY_RUN} nowPT=${nowPT()}`);
+
+  if (msUntil(stopAfter) < 0) {
+    log(`travel window closed at ${stopAfter} PT; nothing left to do.`);
+    return;
+  }
+
+  // A reservation already in hand means stop. Booking a second one just earns
+  // a no-show fee on whichever goes unused.
+  const prior = await alreadyBooked();
+  if (prior.booked) {
+    log(`already booked — "${prior.title}" (${prior.url}). Standing down.`);
+    return;
+  }
+  if (!prior.known) log(`could not confirm whether we already booked: ${prior.reason}`);
+
   log(`route: ${trip.from.name} -> ${trip.to.name}, car under 22 feet`);
   for (const t of trip.targets) log(`  target: ${t.label} ${t.date} ${t.earliest}-${t.latest}`);
 
@@ -130,7 +146,7 @@ async function main() {
         const result = await bookSailing(page, pick, trip);
         if (result.ok) {
           await notify({
-            title: `Booked: ${pick.date} ${pick.depart} Orcas to Anacortes`,
+            title: `Booked: ${pick.date} ${pick.depart} Orcas to Anacortes`, // 'Booked:' prefix is the standdown marker
             body: `Confirmation: ${result.confirmation ?? 'see the reservation site'}\n\n`
               + `Sailing: ${pick.depart} on ${pick.date} (${pick.label})\n`
               + `Check in at the tollbooth at least 30 minutes before departure, and arrive `
