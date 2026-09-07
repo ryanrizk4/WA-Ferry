@@ -24,7 +24,7 @@ concurrency:
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
     permissions:
       # Naming any permission replaces the whole default set, so contents:read
       # has to be restated or checkout cannot clone this private repo.

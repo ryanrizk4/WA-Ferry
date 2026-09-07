@@ -16,6 +16,7 @@
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { trip, releases, limits, stopAfter } from './config.js';
+import { fromPT } from './lib/time.js';
 import { nowPT, msUntil, humanDuration } from './lib/time.js';
 import { alreadyBooked } from './lib/state.js';
 import { notify } from './lib/notify.js';
@@ -259,7 +260,7 @@ async function main() {
       }
 
       if (Date.now() >= deadline) break;
-      if (MODE !== 'snipe') break; // watch mode is a single pass
+      if (MODE === 'watch') { await sleep(limits.idlePollMs); continue; }
 
       // Three speeds. Hard through the first minute, eased through the rush,
       // then a slow patient watch for carts expiring unpaid.

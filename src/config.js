@@ -64,8 +64,20 @@ export const releases = [
 // runs this on public infrastructure, and hammering it is both rude and the
 // fastest way to get an IP range blocked right before the moment that matters.
 export const limits = {
-  // Gap between availability checks during ordinary cancellation watching.
-  idlePollMs: 60_000,
+  // Cancellation watching. Each triggered run polls for a while rather than
+  // checking once and quitting, because the trigger only fires hourly and a
+  // single glance an hour catches almost nothing.
+  //
+  // How long it keeps looking scales with how close the trip is. Cancellations
+  // cluster as people finalise plans, and Actions minutes are finite, so the
+  // budget goes where the odds are rather than being spread evenly across a
+  // week of nothing.
+  idlePollMs: 45_000,
+  watchWindows: [
+    { withinHours: 24, runForMs: 15 * 60_000 },   // final day: watch most of the hour
+    { withinHours: 48, runForMs: 5 * 60_000 },
+    { withinHours: Infinity, runForMs: 0 },       // further out: one look and out
+  ],
   // Gap between checks during a release. The first minute is where a release
   // is won or lost, so poll hard then and ease off after: a steady one request
   // a second for half an hour is both rude and pointless once the rush clears.
