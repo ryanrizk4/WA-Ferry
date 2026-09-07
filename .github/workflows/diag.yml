@@ -6,6 +6,9 @@ name: Diagnose the captcha question
 # Kept for re-checking if WSF changes the flow, but no longer runs on pushes,
 # because each run puts a sailing in a cart for a moment.
 on:
+  push:
+    branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
+    paths: ['src/diag.js']
   workflow_dispatch:
 
 jobs:
