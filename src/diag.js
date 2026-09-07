@@ -91,11 +91,17 @@ try {
 
   const before = await controls(page);
   log('\n  -- dropdowns on the search page --');
-  log(j(before.selects));
-  log('\n  -- inputs and buttons --');
-  log(j(before.inputs));
-  log('\n  -- links (is there a way back to the full site?) --');
-  log(j(before.links.filter((l) => /full|desktop|site|home/i.test(l.text))));
+  for (const sel of before.selects) {
+    log(`    ${sel.id}  [${sel.size}]  ${sel.options.slice(0, 9).join(' | ')}`);
+  }
+  log('\n  -- inputs and buttons (size matters: 44px is thumb-friendly) --');
+  for (const i of before.inputs) {
+    log(`    ${i.id}  type=${i.type}  [${i.size}]  value=${JSON.stringify(i.value)}`);
+  }
+  log('\n  -- links out (is there a way back to the full site?) --');
+  for (const l of before.links.filter((x) => /full|desktop|site/i.test(x.text))) {
+    log(`    "${l.text}"  [${l.size}]`);
+  }
 
   rule('2. Can the search be driven with a thumb?');
   // Work from what is actually on the page rather than from guessed ids: the
@@ -136,14 +142,39 @@ try {
   await settle(page);
   log(`  date set to ${d}`);
 
-  // Vehicle length, then whatever height control that reveals. On the desktop
-  // site choosing "under 22 feet" swaps in a different height dropdown, and
-  // the one visible beforehand is a decoy; check whether mobile does the same.
+  // Vehicle length, then the height. The first attempt at this stopped on
+  // "Please Select Vehicle Height" because it set the length and assumed the
+  // height would follow. It does not: both are required, and on the desktop
+  // site choosing "under 22 feet" swaps in a different height dropdown while
+  // the one visible beforehand is a decoy. So set the length, then look again
+  // at what is on the page, then choose the height from whatever is really
+  // there rather than from a remembered id.
   await page.selectOption(`#${vehId}`, '3');
   await settle(page);
   const afterVehicle = await controls(page);
   log('\n  -- dropdowns AFTER choosing "vehicle under 22 feet" --');
-  log(j(afterVehicle.selects.map((s) => ({ id: s.id, size: s.size, options: s.options }))));
+  for (const sel of afterVehicle.selects) {
+    log(`    ${sel.id}  [${sel.size}]  ${sel.options.join(' | ')}`);
+  }
+
+  // "Up to 7'2\" tall" is the traveller's vehicle. Match on the text so this
+  // does not depend on the value being the same as the desktop site's.
+  const heightSel = afterVehicle.selects.filter((sel) => /height/i.test(sel.id));
+  let chosenHeight = null;
+  for (const sel of heightSel) {
+    const opt = sel.options.find((o) => /up to 7.?2/i.test(o));
+    if (!opt) continue;
+    const value = opt.split('=')[0];
+    try {
+      await page.selectOption(`#${sel.id}`, value);
+      await settle(page);
+      chosenHeight = `${sel.id} = ${opt}`;
+      break;
+    } catch (e) {
+      log(`    (could not set ${sel.id}: ${e.message.split('\n')[0]})`);
+    }
+  }
+  log(`  height set: ${chosenHeight ?? 'FAILED - no height dropdown accepted a value'}`);
 
   rule('3. Does it return a sailing list, and can a thumb hit the rows?');
   const showBtn = afterVehicle.inputs.find((i) => /show/i.test(i.value || ''))
@@ -181,8 +212,13 @@ try {
       text: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 900),
     };
   });
-  log(`  tables: ${j(results.tables)}`);
-  log(`  radios (44px is the thumb-friendly minimum): ${j(results.radios)}`);
+  log(`  tables with more than 2 rows (a sailing list would be one): `
+    + j(results.tables.filter((t) => t.rows > 2)));
+  log(`  radios (44px is the thumb-friendly minimum):`);
+  for (const r of results.radios) {
+    log(`    ${r.id}  [${r.size}]  disabled=${r.disabled}  onScreen=${r.onScreenHorizontally}`);
+  }
+  if (!results.radios.length) log('    NONE - no sailing list came back');
   log(`  page wider than the screen: ${results.widerThanScreen}`);
   log(`\n  page text:\n  ${results.text}`);
 
