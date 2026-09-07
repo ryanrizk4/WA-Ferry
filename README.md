@@ -54,13 +54,47 @@ Check the interisland schedule for the day, since the connection has to work.
 
 ## What it does
 
-Everything runs on GitHub Actions, so nothing has to stay open on a laptop.
+Everything runs on GitHub Actions. Nothing has to stay open on a laptop, which
+matters because there will not be a laptop on this trip: the phone is the only
+device, and the cloud watcher is the whole system rather than a backstop.
 
-- **`snipe`** starts well before each wave, because Actions cron is queued and
-  drifts. It idles, signs in and primes the search form two minutes out, then
+- **`watch`** is the main event. It holds a browser open and re-checks every
+  45 seconds for hours at a stretch, then hands off to the next run before it
+  exits. Space returned by a cancellation can vanish inside six minutes, so
+  the only way to catch one is to be looking when it happens.
+- **`snipe`** starts well before each release wave and each cancellation
+  deadline, idles, signs in and primes the search form two minutes out, then
   waits for the exact second and re-checks every couple of seconds.
-- **`watch`** polls at a gentle interval the rest of the time, for cancellations.
 - **`check`** is a read-only report of what is open. Safe to run anytime.
+
+### Why the watch chains itself
+
+GitHub's cron cannot be relied on here. Over one fourteen-hour stretch an
+every-fifteen-minutes schedule produced 36 runs where it promised about 120,
+and the gaps are exactly when a returned cancellation goes to somebody else.
+
+So the watch does not wait to be scheduled. Each run asks GitHub to start the
+next one before it exits, and the cron becomes a safety net rather than the
+mechanism. The hand-off runs even when the run crashed or was killed at its
+timeout; the only things that stop the chain are the two real endings, a
+reservation in hand or the travel window closing, and the code has to write
+`out/stop-watching` to say so. If a hand-off ever fails, the run goes red
+**and** pushes an urgent notification, because a broken chain that says
+nothing is indistinguishable from a quiet week.
+
+### Public repository, continuous watching
+
+Actions minutes are metered on private repositories and unmetered on public
+ones. Holding a browser open for hours is only affordable on the second, so
+the code asks GitHub which this repository is and picks its own run length:
+five and a half hours when public, the old short tapered windows when private,
+and it says which in the log. Flipping visibility therefore cannot quietly
+produce either a surprise bill or a silently truncated watch.
+
+**While the repository is private, cover is a few minutes out of every
+quarter hour rather than continuous.** Settings → General → Danger Zone →
+Change visibility is the switch. There are no credentials in the code; they
+live in encrypted Actions secrets, which stay private either way.
 
 ## The captcha: settled, and it decides the design
 
@@ -88,69 +122,45 @@ window measured in seconds.
 
 ## If the schedule does not fire
 
-GitHub's cron had not produced a single run of the 15-minute watch in the
-45 minutes after it was armed, across three slots, while every push-triggered
-run worked immediately. Schedules are known to be delayed or dropped under
-load, and this project comes down to two moments that do not come round again.
+GitHub's cron is unreliable here, so nothing depends on a single trigger.
 
-So there are three independent ways the snipe can start:
+The watch covers itself by chaining, as above. The snipe runs, which have to
+land at an exact minute and do not come round again, have three independent
+starts:
 
-1. **Two cron entries**, 06:25 and 06:35 PT on Sept 11 and 12.
+1. **Two cron entries** per target, ten minutes apart.
 2. **A file touch.** Committing any change to `.snipe-trigger` starts a snipe
    run. The script waits out the remaining time itself, so firing any time in
    the half hour before a release is enough.
-3. **A scheduled wake-up** on the Claude session that built this, set for
-   13:15 UTC on Sept 11 and 12, which checks whether cron already fired and
-   touches the trigger file if not.
+3. **A scheduled wake-up** on the Claude session that built this, which checks
+   whether cron already fired and touches the trigger file if not.
 
-Either of the first two is sufficient on its own.
+Any one of them is sufficient on its own.
 
-The cancellation watch has the same problem and the same answer: an hourly
-Claude routine touches `.watch-trigger`, which runs one pass over all three
-target windows. That is hourly rather than every fifteen minutes, so it is
-thinner cover than intended, but it is cover. If GitHub's cron ever starts
-working the two simply run alongside each other, and the booking guard stops
-anything being taken twice.
+## Booking from a phone
 
-## Running it on your own laptop (the better option for a release)
+There is no laptop on this trip, so the booking will be done by hand on a
+phone, against a clock, possibly in the middle of the night. `src/local.js`
+still exists and still works if a laptop is ever available, but it is not the
+plan.
 
-The cloud version can only tell you space appeared. This one does everything
-up to the captcha and stops with the page ready, so your whole job is to tick
-the box and press Add to Cart. Three seconds of work instead of forty.
+WSF does not serve phones a narrow version of its desktop site. It serves a
+**different site**: the controls are named `MobileMainContent_*` rather than
+`MainContent_*`, the vehicle-height dropdown is a different control, and the
+page fits a phone screen properly instead of needing to be pinched. The
+desktop flow is still reachable from a phone through the "Full Site" link at
+the bottom of the page, or Safari's Request Desktop Website, but it renders
+1040 pixels of content into a 980 pixel window with 13-pixel radio buttons.
 
-It also simply works better from home. reCAPTCHA weighs where a request comes
-from: a datacenter address gets the hard image grid almost every time, an
-ordinary home connection in an ordinary browser usually gets the one-click
-checkbox. Nothing here dodges the captcha, a person still solves it. It just
-runs where the person is.
+`docs/PHONE.md` is the playbook: which of the two to use, and the exact
+sequence of taps, worked out in advance so none of it is being figured out
+while the space disappears.
 
-One-time setup:
-
-```
-git clone https://github.com/ryanrizk4/WA-Ferry && cd WA-Ferry
-npm install
-npx playwright install chromium
-```
-
-Then, in the same terminal:
-
-```
-export WSF_EMAIL="the email on your WSF account"
-export WSF_PASSWORD="the password"
-export NTFY_TOPIC="your ntfy topic"      # optional, pushes your phone too
-
-npm run local                                        # watch for cancellations
-npm run local -- --at "2026-09-11T07:00:00"          # wait for Sunday's release
-npm run local -- --at "2026-09-12T07:00:00"          # wait for Monday's release
-```
-
-A browser window opens and signs in. Leave it visible, and leave the laptop
-awake and plugged in. It beeps and prints in the terminal when it finds
-something, and it stops as soon as the sailing is selected. It will not click
-anything else for you.
-
-Run it as well as the cloud watcher, not instead of. They do not conflict:
-whichever sees space first, a human still completes the booking.
+One thing to know before the alert arrives: **the sailing page cannot be
+deep-linked.** Every query-parameter shape was tried and ignored. Tapping the
+notification opens the search form, not a filled-in list of sailings, so the
+route, date and vehicle have to be entered by hand every time. That is most of
+the elapsed seconds, and it is why the playbook exists.
 
 ## Setup
 
