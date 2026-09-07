@@ -4,4 +4,4 @@ GitHub's cron never fired here, so the cancellation watch cannot rely on it.
 An hourly Claude routine touches this file instead. Each touch is one pass over
 all three target windows, about a minute of Actions time.
 
-last touched: initial
+last touched: 2026-09-07T16:39:42Z
