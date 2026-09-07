@@ -1,0 +1,7 @@
+Touching this file runs one availability check.
+
+GitHub's cron never fired here, so the cancellation watch cannot rely on it.
+An hourly Claude routine touches this file instead. Each touch is one pass over
+all three target windows, about a minute of Actions time.
+
+last touched: initial
