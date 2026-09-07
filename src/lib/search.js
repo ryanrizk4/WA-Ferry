@@ -69,14 +69,21 @@ export async function searchDate(page, isoDate, trip) {
   // Running a search consumes the form: the page swaps in results and the
   // Show Availability button goes away. Before each search, make sure we are
   // looking at a form we can actually drive, and rebuild it if not.
-  if (!(await flow.searchFormReady(page))) {
+  const hasContinue = (await page.locator(flow.F.showAvailability).count()) > 0;
+  const hasRefresh = (await page.locator(flow.F.refresh).count()) > 0;
+  if (!hasContinue && !hasRefresh) {
     if (!trip) throw new Error('search form is gone and no trip given to rebuild it');
     await prepareSearch(page, trip);
   }
+
   await flow.setDate(page, wsfDate(isoDate));
   const bad = await flow.readValidation(page);
   if (bad.cvTravelDate) throw new Error(`date rejected: ${bad.cvTravelDate}`);
-  await flow.showAvailability(page);
+
+  // After the first search the button becomes Refresh; both re-run the query.
+  if (await page.locator(flow.F.showAvailability).count()) await flow.showAvailability(page);
+  else await flow.refreshAvailability(page);
+
   return parseSailings(page);
 }
 

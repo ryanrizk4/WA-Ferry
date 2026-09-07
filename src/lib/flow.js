@@ -17,7 +17,12 @@ export const F = {
   height: '#MainContent_ddlCarTruck14To22',
   schedule: '#schedule',
   showAvailability: '#MainContent_linkBtnContinue',
+  // Once a search has run, Show Availability is replaced by Refresh, which
+  // re-runs the same query in a single postback. That is the cheap path for
+  // polling: no page load, no re-selecting route and vehicle.
+  refresh: '#MainContent_linkBtnRefresh',
   startOver: '#MainContent_linkBtnStartOver',
+  grid: '#MainContent_gvschedule',
 };
 
 export const VALUES = {
@@ -236,5 +241,35 @@ export async function detectCaptcha(page) {
     }
     const flag = document.querySelector('input[name*="isShowCaptcha" i]');
     return { found, isShowCaptchaValue: flag ? flag.value : null };
+  });
+}
+
+// Re-run the current search in one postback. Much lighter than rebuilding the
+// form, which matters when polling every couple of seconds during a release.
+export async function refreshAvailability(page) {
+  await page.click(F.refresh, { timeout: 10000 });
+  await page.waitForFunction(() => Boolean(document.querySelector('#MainContent_gvschedule')),
+    null, { timeout: 25000 });
+  await settle(page);
+}
+
+// Is a captcha being demanded right now?
+//
+// WSF puts Google reCAPTCHA on the booking step. This does not try to solve or
+// slip past it — that is the operator's anti-bot control and defeating it is
+// not on the table. It reports the fact so the run can hand off to a human
+// while the space is still there.
+export async function captchaBlocking(page) {
+  return page.evaluate(() => {
+    const frames = [...document.querySelectorAll('iframe[src*="recaptcha"], iframe[src*="hcaptcha"]')];
+    const visible = frames.some((f) => {
+      const r = f.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+    const widget = document.querySelector('#ZCaptcha, .g-recaptcha, #MainContent_CaptchaID');
+    const widgetVisible = widget ? widget.getBoundingClientRect().width > 0 : false;
+    // Already-solved challenges leave a token in this field.
+    const token = document.querySelector('#g-recaptcha-response')?.value || '';
+    return { blocking: (visible || widgetVisible) && !token, framesFound: frames.length, solved: Boolean(token) };
   });
 }

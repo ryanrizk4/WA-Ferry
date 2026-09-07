@@ -144,6 +144,24 @@ async function main() {
           });
           return;
         }
+        // A captcha is not a retryable error — trying again just burns the
+        // seconds during which the space is still there. Hand it to a human
+        // immediately, with everything they need to finish in one tap.
+        if (result.handoff) {
+          log(`pass ${pass}: handing off — ${result.reason}`);
+          await notify({
+            title: `GO NOW: ${pick.depart} on ${pick.date} is open`,
+            body: `Space opened on the ${pick.depart} sailing from ${trip.from.name} to `
+              + `${trip.to.name} on ${pick.date} (${pick.label}), vessel ${pick.vessel}.\n\n`
+              + `${result.reason}. You need to finish this by hand, and fast:\n\n`
+              + `https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx\n\n`
+              + `Orcas Island to Anacortes, ${pick.date}, vehicle under 22 feet, up to 7'2" tall. `
+              + `Pick the ${pick.depart} sailing.`,
+            priority: 'high',
+          });
+          return;
+        }
+
         log(`pass ${pass}: booking attempt ${attempts} failed: ${result.reason}`);
         if (attempts >= limits.maxBookingAttempts) {
           await notify({
