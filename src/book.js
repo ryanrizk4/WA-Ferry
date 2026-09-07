@@ -260,7 +260,7 @@ try {
   const detail = e?.stack?.split('\n').slice(0, 4).join('\n') ?? String(e);
   console.error(detail);
   await notify({
-    title: 'Ferry bot crashed — check it before the next release',
+    title: 'Ferry bot crashed - check it before the next release',
     body: `The ${MODE} run failed before it could finish.\n\n${detail}\n\n`
       + `Book by hand if a release is imminent: `
       + `https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx`,

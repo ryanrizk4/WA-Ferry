@@ -8,7 +8,7 @@
 import { notify } from './lib/notify.js';
 
 await notify({
-  title: 'WA-Ferry test — this is what a real alert looks like',
+  title: 'WA-Ferry test 2 - confirming the push actually lands',
   body: 'If this reached your phone, the alerting path works and you are set.\n\n'
     + 'The real one will name the sailing and date, and link straight to the '
     + 'booking page. It fires the moment space appears, which in practice means '
