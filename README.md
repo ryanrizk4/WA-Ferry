@@ -58,6 +58,25 @@ So booking cannot be automated, and the design is built around that:
 A phone push is therefore not optional in practice. Email is too slow for a
 window measured in seconds.
 
+## If the schedule does not fire
+
+GitHub's cron had not produced a single run of the 15-minute watch in the
+45 minutes after it was armed, across three slots, while every push-triggered
+run worked immediately. Schedules are known to be delayed or dropped under
+load, and this project comes down to two moments that do not come round again.
+
+So there are three independent ways the snipe can start:
+
+1. **Two cron entries**, 06:25 and 06:35 PT on Sept 11 and 12.
+2. **A file touch.** Committing any change to `.snipe-trigger` starts a snipe
+   run. The script waits out the remaining time itself, so firing any time in
+   the half hour before a release is enough.
+3. **A scheduled wake-up** on the Claude session that built this, set for
+   13:15 UTC on Sept 11 and 12, which checks whether cron already fired and
+   touches the trigger file if not.
+
+Either of the first two is sufficient on its own.
+
 ## Setup
 
 Repository secrets, under Settings → Secrets and variables → Actions:
@@ -83,7 +102,7 @@ you do not turn up or cancel late).
 | `src/lib/search.js` | Reads the sailing table. |
 | `src/lib/booking.js` | Selects a sailing and checks out. Stops at any captcha. |
 | `src/lib/time.js` | Pacific time. Getting this wrong by an hour means missing the wave. |
-| `src/lib/notify.js` | Tells you what happened. |
+| `src/lib/notify.js` | Tells you what happened. Titles are forced to ASCII; see below. |
 | `src/lib/state.js` | Stands the whole thing down once a reservation exists. |
 
 ## Notes on the site
@@ -100,3 +119,8 @@ Things learned the hard way, recorded so they are not relearned:
   is WSF's wording for sold out with more space coming.
 - After a search, "Show Availability" becomes "Refresh", which re-runs the same
   query in one postback.
+- **Notification titles must be plain ASCII.** ntfy takes the title as an HTTP
+  header, headers carry bytes rather than text, and one em dash threw
+  `Cannot convert argument to a ByteString` before the request was sent. No
+  push went out, and nothing in the logs looked wrong. Titles are now
+  transliterated, with a plain-title retry behind that.
