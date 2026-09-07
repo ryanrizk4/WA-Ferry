@@ -33,7 +33,7 @@ jobs:
         env:
           MODE: snipe
           DRY_RUN: 'false'
-          TEST_RELEASE_AT: '2026-09-06T21:54:00'
+          TEST_RELEASE_AT: '2026-09-07T09:08:00'
           TEST_SPRINT_MS: '120000'
           WSF_EMAIL: ${{ secrets.WSF_EMAIL }}
           WSF_PASSWORD: ${{ secrets.WSF_PASSWORD }}
