@@ -77,6 +77,13 @@ So there are three independent ways the snipe can start:
 
 Either of the first two is sufficient on its own.
 
+The cancellation watch has the same problem and the same answer: an hourly
+Claude routine touches `.watch-trigger`, which runs one pass over all three
+target windows. That is hourly rather than every fifteen minutes, so it is
+thinner cover than intended, but it is cover. If GitHub's cron ever starts
+working the two simply run alongside each other, and the booking guard stops
+anything being taken twice.
+
 ## Setup
 
 Repository secrets, under Settings → Secrets and variables → Actions:
