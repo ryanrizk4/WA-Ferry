@@ -30,17 +30,10 @@ try {
     await q.click({ timeout: 8000 }).catch(() => {});
     await page.waitForTimeout(2500);
   }
-  // Open everything else too, in case the advice lives under another question.
-  await page.evaluate(() => {
-    for (const d of document.querySelectorAll('details')) d.open = true;
-    for (const el of document.querySelectorAll('a,button,summary,[role=button]')) {
-      const t = (el.innerText || '').toLowerCase();
-      if (t.includes('?') || t.includes('cancel') || t.includes('change')) {
-        try { el.click(); } catch { /* ignore */ }
-      }
-    }
-  }).catch(() => {});
-  await page.waitForTimeout(2500);
+  // Nothing else gets clicked. The previous version opened everything whose
+  // text contained a question mark, which navigated off the page entirely and
+  // made the answer vanish from a run that had already found it once.
+  console.log(`reading: ${page.url()}`);
 
   const text = (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ');
 
