@@ -1,18 +1,18 @@
-// Recon round three.
+// Recon round four: what does the booking flow actually ask for?
 //
-// Round two got the route in but stalled on two things: the date box has
-// maxlength=8 so a four-digit year never fit, and the height dropdown for a
-// car under 22 feet is a different control than the one being set. Height is
-// fixed in flow.js; the date format is still a guess, so probe candidates here
-// and let the page's own validation say which one it accepts.
+// The search works now, so this does two things:
+//   1. reports current availability for both target dates
+//   2. selects one bookable sailing to reveal the checkout steps
 //
-// Then run the search and dump the sailing table, which is the thing the
-// checker actually has to read.
+// It deliberately stops at the first checkout screen. Nothing here completes a
+// reservation. Selecting a sailing puts it in a cart that WSF expires on its
+// own, and the run clicks Start Over at the end to let it go immediately.
 
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { trip } from './config.js';
 import * as flow from './lib/flow.js';
+import { prepareSearch, searchDate } from './lib/search.js';
 
 const OUT = 'out';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
@@ -22,87 +22,76 @@ mkdirSync(OUT, { recursive: true });
 const log = (...a) => console.log(...a);
 const rule = (t) => log(`\n${'='.repeat(72)}\n${t}\n${'='.repeat(72)}`);
 
-// Candidates, shortest first. maxlength=8 makes MM/DD/YY the favourite.
-const dateFormats = {
-  'MM/DD/YY': ([y, m, d]) => `${m}/${d}/${y.slice(2)}`,
-  'M/D/YY': ([y, m, d]) => `${+m}/${+d}/${y.slice(2)}`,
-  'MM/DD/YYYY': ([y, m, d]) => `${m}/${d}/${y}`,
-  'MMDDYYYY': ([y, m, d]) => `${m}${d}${y}`,
-};
-
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1440, height: 1200 } });
 const page = await ctx.newPage();
-page.on('console', (m) => { if (m.type() === 'error') log(`[console] ${m.text().slice(0, 160)}`); });
 
-const target = trip.targets[0];
-const iso = target.date.split('-');
+await prepareSearch(page, trip);
 
-rule(`DATE FORMAT PROBE for ${target.date}`);
-let winner = null;
-for (const [name, fmt] of Object.entries(dateFormats)) {
-  const candidate = fmt(iso);
-  try {
-    await flow.openSearch(page);
-    await flow.setRoute(page, String(trip.from.id), String(trip.to.id));
-    const shown = await flow.setDate(page, candidate);
-    const v = await flow.readValidation(page);
-    const rejected = Boolean(v.cvTravelDate);
-    log(`  ${name.padEnd(11)} sent "${candidate}" -> box reads "${shown}" ${rejected ? `REJECTED: ${v.cvTravelDate}` : 'ACCEPTED'}`);
-    if (!rejected && shown) { winner = candidate; break; }
-  } catch (e) {
-    log(`  ${name.padEnd(11)} sent "${candidate}" -> error: ${e.message.split('\n')[0]}`);
+let bookable = null;
+for (const target of trip.targets) {
+  rule(`AVAILABILITY: ${target.date} — ${target.label}`);
+  const res = await searchDate(page, target.date);
+  if (!res.ok) { log(`  ${res.reason}`); continue; }
+  log(`  ${res.heading}`);
+  for (const r of res.rows) {
+    const mark = r.bookable ? 'OPEN  ' : 'full  ';
+    log(`  ${mark} ${r.depart.padEnd(9)} ${r.vessel.padEnd(10)} ${r.spacesText}`);
+    if (r.bookable && !bookable) bookable = { ...r, date: target.date };
   }
 }
-log(`\nwinning format: ${winner ?? 'NONE — every candidate was rejected'}`);
 
-if (winner) {
-  rule(`SEARCH: ${trip.from.name} -> ${trip.to.name} on ${target.date}`);
-  try {
-    await flow.setVehicle(page, flow.VALUES.vehicleUnder22, flow.VALUES.heightUpTo72);
-    log('vehicle set: under 22 feet, up to 7\'2" tall');
-    log(`validation before search: ${JSON.stringify(await flow.readValidation(page))}`);
+if (!bookable) {
+  rule('NO BOOKABLE SAILING RIGHT NOW');
+  log('Nothing is open on either date, so the checkout flow cannot be explored');
+  log('this run. Re-run when something frees up, or at the 7 a.m. release.');
+} else {
+  rule(`SELECTING ${bookable.date} ${bookable.depart} to reveal the checkout flow`);
+  log('(this only puts a sailing in the cart; nothing is confirmed)');
 
-    await flow.showAvailability(page);
-    log(`search done -> ${page.url()}`);
-    log(`validation after search: ${JSON.stringify(await flow.readValidation(page))}`);
-  } catch (e) {
-    log(`SEARCH ERROR: ${e.message.split('\n')[0]}`);
-  }
+  // The results table is rebuilt on each search, so re-run the date we want
+  // before clicking into it.
+  await searchDate(page, bookable.date);
+  await page.click(`#${bookable.radioId}`);
+  await page.waitForTimeout(3000);
 
-  writeFileSync(`${OUT}/search.html`, await page.content());
-  await page.screenshot({ path: `${OUT}/search.png`, fullPage: true }).catch(() => {});
+  log(`after selecting -> ${page.url()}`);
+  writeFileSync(`${OUT}/selected.html`, await page.content());
+  await page.screenshot({ path: `${OUT}/selected.png`, fullPage: true }).catch(() => {});
 
   const cap = await flow.detectCaptcha(page).catch((e) => ({ error: String(e) }));
   log(`\n-- captcha probe --\n${JSON.stringify(cap)}`);
 
-  // The sailing table. This is what the checker parses, so dump it raw.
-  const sched = await page.evaluate((sel) => {
-    const el = document.querySelector(sel);
-    return el ? { found: true, text: el.innerText, html: el.innerHTML } : { found: false };
-  }, flow.F.schedule).catch((e) => ({ found: false, error: String(e) }));
+  const text = await page.evaluate(() => document.body?.innerText || '');
+  log(`\n-- visible text --\n${text.replace(/\n{3,}/g, '\n\n').slice(0, 5000)}`);
 
-  if (!sched.found) {
-    log(`\n!! ${flow.F.schedule} not found ${sched.error ?? ''}`);
-  } else {
-    log(`\n-- #schedule visible text --\n${sched.text.slice(0, 4000)}`);
-    const clean = sched.html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/\s{2,}/g, ' ');
-    log(`\n-- #schedule markup (${clean.length} chars) --\n${clean.slice(0, 12000)}`);
-  }
-
-  // Whatever the per-sailing affordance turns out to be.
-  const picks = await page.evaluate(() => [...document.querySelectorAll('#schedule a,#schedule button,#schedule input')]
+  // What can we press next, and what does it want from us?
+  const controls = await page.evaluate(() => [...document.querySelectorAll('a,button,input,select')]
+    .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
     .map((el) => ({
       tag: el.tagName.toLowerCase(),
+      type: el.getAttribute('type') || '',
       id: el.id || '',
-      cls: (el.getAttribute('class') || '').slice(0, 50),
-      onclick: (el.getAttribute('onclick') || el.getAttribute('href') || '').slice(0, 120),
-      text: (el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 50),
-    }))).catch(() => []);
-  log(`\n-- clickable things inside #schedule (${picks.length}) --`);
-  for (const p of picks.slice(0, 60)) log(`  <${p.tag}> id=${p.id} cls=${p.cls} text="${p.text}" -> ${p.onclick}`);
+      name: el.getAttribute('name') || '',
+      text: (el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 60),
+      required: el.hasAttribute('required'),
+    })));
+  log(`\n-- controls on the checkout screen (${controls.length}) --`);
+  for (const c of controls) {
+    log(`  <${c.tag}${c.type ? ` type=${c.type}` : ''}> id=${c.id} name=${c.name}`
+      + `${c.required ? ' REQUIRED' : ''} text="${c.text}"`);
+  }
+
+  // Release the cart rather than leaving a sailing held for someone else.
+  rule('RELEASING THE CART');
+  const startOver = await page.locator(flow.F.startOver).count();
+  if (startOver) {
+    await page.click(flow.F.startOver).catch((e) => log(`  start over failed: ${e.message}`));
+    await page.waitForTimeout(2000);
+    log(`  clicked Start Over -> ${page.url()}`);
+  } else {
+    log('  no Start Over control on this screen; the cart will expire on its own');
+  }
 }
 
 rule('DONE');
