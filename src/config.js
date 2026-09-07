@@ -68,13 +68,20 @@ export const limits = {
   idlePollMs: 60_000,
   // Gap between checks during a release. The first minute is where a release
   // is won or lost, so poll hard then and ease off after: a steady one request
-  // a second for ten minutes is both rude and pointless once the initial rush
-  // has cleared.
+  // a second for half an hour is both rude and pointless once the rush clears.
   sprintPollMs: 1_000,
   sprintHardMs: 60_000,
   sprintEasedPollMs: 3_000,
-  // How long to keep sprinting after a release fires before giving up.
-  sprintWindowMs: 10 * 60_000,
+
+  // Keep going well past the rush, because of how carts work. Space that
+  // someone grabs and does not check out goes back on sale when their cart
+  // expires, which is a second, quieter wave maybe fifteen to twenty-five
+  // minutes after the release. Far fewer people are still watching by then,
+  // so it is a better chance than the scramble at 7:00:00 even though it
+  // feels like the afterthought.
+  sprintWindowMs: 35 * 60_000,
+  secondWaveAfterMs: 10 * 60_000,
+  secondWavePollMs: 20_000,
   // Never attempt more than this many bookings in one run, whatever happens.
   maxBookingAttempts: 3,
 };

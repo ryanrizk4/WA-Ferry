@@ -16,8 +16,8 @@ on:
     # the release regardless of when it started, and the concurrency group
     # keeps them from overlapping. A duplicate that starts after the release
     # has passed exits on its own without booking anything.
-    - cron: '25 13 11,12 9 *'   # 06:25 PT
-    - cron: '35 13 11,12 9 *'   # 06:35 PT
+    - cron: '20 13 11,12 9 *'   # 06:20 PT
+    - cron: '30 13 11,12 9 *'   # 06:30 PT
   # Independent of GitHub's scheduler. Touching this file starts a snipe run,
   # which gives a second, unrelated way to fire at 7 a.m. if cron does not.
   push:
@@ -37,7 +37,7 @@ concurrency:
 jobs:
   snipe:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     permissions:
       # Naming any permission replaces the whole default set, so contents:read
       # has to be restated or checkout cannot clone this private repo.

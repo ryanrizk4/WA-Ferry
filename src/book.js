@@ -101,10 +101,10 @@ async function main() {
     }
     log(`release: ${release.wave} at ${release.at} PT (${humanDuration(release.ms)} away)`);
 
-    // Sit idle until shortly before the release, then warm up. Two minutes is
-    // enough to sign in and load the search form, and short enough that the
-    // session will not have gone stale by 7:00:00.
-    const WARMUP_LEAD = 120_000;
+    // Sit idle, then warm up with enough margin to also get a human ready.
+    // Seven minutes covers signing in, priming the form, and sending a
+    // heads-up in time for someone to actually open the page and set it up.
+    const WARMUP_LEAD = 7 * 60_000;
     const idle = release.ms - WARMUP_LEAD;
     if (idle > 0) {
       log(`idling ${humanDuration(idle)}, then warming up ${humanDuration(WARMUP_LEAD)} early`);
@@ -141,10 +141,42 @@ async function main() {
   log('search form primed: route and vehicle set');
 
   if (release) {
+    // The slow part of booking is not reacting, it is setting up: opening the
+    // site, choosing the route, typing the date, picking the vehicle. Done
+    // beforehand, the whole job at 7:00:00 is Refresh, click the sailing,
+    // tick the box. So tell the human to get into position now.
+    await notify({
+      title: `Ferry release in ${Math.round(msUntil(release.at) / 60000)} minutes - get set up now`,
+      body: `${release.wave}, at 7:00:00 a.m. Pacific.\n\n`
+        + `Open this on your phone or laptop right now and set it up, so at 7:00 `
+        + `all you have to do is hit Refresh:\n\n`
+        + `https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx\n\n`
+        + `Set: Departing Orcas Island, Arriving Anacortes, date, `
+        + `Vehicle under 22 feet, Up to 7'2" tall. Press Show Availability once.\n\n`
+        + `Then wait on that page. At 7:00:00 press Refresh, and I will text you `
+        + `which sailing opened the instant I see it. Click that one, tick the `
+        + `captcha, Add to Cart.`,
+      priority: 'high',
+      issue: false,
+    });
+
     const remaining = msUntil(release.at);
-    if (remaining > 0) {
-      log(`primed with ${humanDuration(remaining)} to go; holding until the release`);
-      await sleep(Math.max(0, remaining - 500));
+    if (remaining > 65_000) {
+      await sleep(remaining - 60_000);
+      await notify({
+        title: 'Ferry release in 60 seconds - be on the page',
+        body: 'Sixty seconds. Have the sailing list open with the route, date and '
+          + 'vehicle already set. Press Refresh right on the hour, and watch for my '
+          + 'next message naming the sailing.',
+        priority: 'high',
+        issue: false,
+      });
+    }
+
+    const left = msUntil(release.at);
+    if (left > 0) {
+      log(`primed with ${humanDuration(left)} to go; holding until the release`);
+      await sleep(Math.max(0, left - 500));
     }
     deadline = Date.now() + limits.sprintWindowMs;
   }
@@ -229,12 +261,13 @@ async function main() {
       if (Date.now() >= deadline) break;
       if (MODE !== 'snipe') break; // watch mode is a single pass
 
-      // Hard for the first minute, easier after. Sprint start is the deadline
-      // minus the full window, so this measures time since the release.
+      // Three speeds. Hard through the first minute, eased through the rush,
+      // then a slow patient watch for carts expiring unpaid.
       const sinceStart = Date.now() - (deadline - limits.sprintWindowMs);
-      await sleep(sinceStart < limits.sprintHardMs
-        ? limits.sprintPollMs
-        : limits.sprintEasedPollMs);
+      let gap = limits.sprintEasedPollMs;
+      if (sinceStart < limits.sprintHardMs) gap = limits.sprintPollMs;
+      else if (sinceStart > limits.secondWaveAfterMs) gap = limits.secondWavePollMs;
+      await sleep(gap);
     } while (Date.now() < deadline);
 
     log(`finished after ${pass} pass(es); no reservation made`);
