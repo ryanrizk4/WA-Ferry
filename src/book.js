@@ -279,7 +279,7 @@ async function main() {
         + `Then wait on that page. At 7:00:00 press Refresh, and I will text you `
         + `which sailing opened the instant I see it. Click that one, tick the `
         + `captcha, Add to Cart.`,
-      // Deliberately NOT the full alarm. The six-minute, twenty-four-buzz
+      // Deliberately NOT the full alarm. The repeating, ten-buzz
       // treatment is for a sailing that is open right now and can be taken.
       // A "get ready" message that behaves like an emergency is how an alert
       // people must not ignore becomes one they mute.

@@ -60,7 +60,7 @@ device, and the cloud watcher is the whole system rather than a backstop.
 
 - **`watch`** is the main event. It holds a browser open and re-checks every
   45 seconds for hours at a stretch, then hands off to the next run before it
-  exits. Space returned by a cancellation can vanish inside six minutes, so
+  exits. Space returned by a cancellation can vanish within minutes, so
   the only way to catch one is to be looking when it happens.
 - **`snipe`** starts well before each release wave and each cancellation
   deadline, idles, signs in and primes the search form two minutes out, then

@@ -65,13 +65,18 @@ const BOOKING_URL =
 // The priority was already at maximum and still is: ntfy's "urgent" is its
 // level 5, and there is nothing above it. So the fix is not priority, it is
 // persistence. Three buzzes over fifty seconds is a thing you can miss by
-// being in another room. Twenty-four buzzes over six minutes is not.
+// being in another room. Ten buzzes over two and a half minutes is not.
+//
+// Ten rather than more, at the traveller's request, and the reasoning is
+// sound: somebody who has not noticed ten is not going to notice the next
+// fourteen, and an alarm that outstays its welcome is one that gets muted
+// before the night it matters.
 //
 // The repeats stop early if the space is gone, because the watcher re-checks
 // between them and only keeps alerting while there is still something to act
 // on. Nothing here is worth alarming somebody about after the chance has
 // passed.
-const URGENT_REPEATS = 24;
+const URGENT_REPEATS = 10;
 const REPEAT_GAP_MS = 15_000;
 
 // A ringing phone beats a notification, and ntfy will place an actual phone

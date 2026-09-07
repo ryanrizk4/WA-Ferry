@@ -5,7 +5,7 @@
 // subscribed, or a call number that was never verified all fail silently and
 // look exactly like "no space came up".
 //
-// This is a test, so it deliberately does NOT run the full six-minute alarm a
+// This is a test, so it deliberately does NOT run the full alarm a
 // real alert runs. It sends the push, places the call if one is configured,
 // lets a couple of repeats through so their timing can be felt, and then
 // calls the rest off.
@@ -30,8 +30,8 @@ await notify({
         + 'through than a notification.\n\n'
       : 'No phone call was placed, because no call number is configured.\n\n')
     + 'You should get two or three more buzzes about fifteen seconds apart, '
-    + 'then it stops. A real alert keeps that up for six minutes, or until the '
-    + 'space is gone.\n\n'
+    + 'then it stops. A real alert buzzes ten times over about two and a half '
+    + 'minutes, or until the space is gone.\n\n'
     + 'The real one names the sailing and date and links straight to the '
     + 'booking page. Nothing is booked. This is only a test.',
   priority: 'high',
@@ -42,4 +42,4 @@ await notify({
 // of buzzing is right for a real chance and obnoxious for a test.
 await new Promise((r) => setTimeout(r, 40_000));
 callOffRepeats();
-console.log('test alarm called off after 40s (a real one runs for six minutes)');
+console.log('test alarm called off after 40s (a real one is ten buzzes over ~2.5 min)');
