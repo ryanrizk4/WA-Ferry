@@ -209,14 +209,34 @@ async function main() {
 
   let attempts = 0;
   let pass = 0;
+  let consecutiveFailures = 0;
   try {
     do {
       pass += 1;
       let found = null;
       try {
         found = await findAvailability(page, trip);
+        consecutiveFailures = 0;
       } catch (e) {
-        log(`pass ${pass}: search failed: ${e.message.split('\n')[0]}`);
+        consecutiveFailures += 1;
+        log(`pass ${pass}: search failed (${consecutiveFailures} in a row): ${e.message.split('\n')[0]}`);
+
+        // Recover rather than limp. The page can get into a state it will not
+        // come out of on its own, and without this every later pass fails the
+        // same way while the run still reports success. On a forty minute
+        // watch that means one stumble silently kills the rest of it.
+        if (consecutiveFailures >= 2) {
+          log('  rebuilding: signing in again and re-priming the form');
+          try {
+            const again = await flow.login(page, process.env.WSF_EMAIL, process.env.WSF_PASSWORD);
+            log(`  sign in: ${again.ok ? 'OK' : 'FAILED'} — ${again.reason}`);
+            await prepareSearch(page, trip);
+            consecutiveFailures = 0;
+            log('  recovered');
+          } catch (e2) {
+            log(`  rebuild failed: ${e2.message.split('\n')[0]}`);
+          }
+        }
       }
 
       if (found?.length) {
