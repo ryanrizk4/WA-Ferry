@@ -1,0 +1,49 @@
+name: Dress rehearsal
+
+# The 7 a.m. path runs for real exactly twice, on days that do not come round
+# again. This runs it once beforehand against a made-up release time so the
+# warm-up, both pre-release alerts and the sprint have all actually executed
+# before the morning they matter.
+#
+# Nothing is booked: it takes the same path as a real run, and a real run
+# stops at the captcha anyway.
+on:
+  push:
+    branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
+    paths: ['.github/workflows/rehearsal.yml']
+  workflow_dispatch:
+
+jobs:
+  rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Rehearse the release
+        env:
+          MODE: snipe
+          DRY_RUN: 'false'
+          TEST_RELEASE_AT: '2026-09-06T21:54:00'
+          TEST_SPRINT_MS: '120000'
+          WSF_EMAIL: ${{ secrets.WSF_EMAIL }}
+          WSF_PASSWORD: ${{ secrets.WSF_PASSWORD }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run book
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rehearsal
+          path: out/
+          retention-days: 7

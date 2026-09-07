@@ -16,7 +16,6 @@
 import { chromium } from 'playwright';
 import { mkdirSync } from 'node:fs';
 import { trip, releases, limits, stopAfter } from './config.js';
-import { fromPT } from './lib/time.js';
 import { nowPT, msUntil, humanDuration } from './lib/time.js';
 import { alreadyBooked } from './lib/state.js';
 import { notify } from './lib/notify.js';
@@ -30,9 +29,20 @@ mkdirSync('out', { recursive: true });
 const log = (...a) => console.log(`[${new Date().toISOString()}]`, ...a);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// Overridable so a rehearsal does not have to sit through the full 35 minutes.
+const sprintWindowMs = () => Number(process.env.TEST_SPRINT_MS) || limits.sprintWindowMs;
+
 // The release we are here for: the next one still ahead of us, or one that
 // fired within the sprint window (a late-starting runner must not give up).
 function currentRelease() {
+  // A dress rehearsal can name its own release time. The 7 a.m. path only
+  // executes twice for real, on days that do not come round again, so it
+  // needs to have been run at least once before then.
+  const fake = process.env.TEST_RELEASE_AT;
+  if (fake) {
+    log(`REHEARSAL: treating ${fake} PT as the release`);
+    return { at: fake, wave: 'dress rehearsal (not a real release)', ms: msUntil(fake) };
+  }
   const candidates = releases
     .map((r) => ({ ...r, ms: msUntil(r.at) }))
     .filter((r) => r.ms > -limits.sprintWindowMs && r.ms < 60 * 60_000)
@@ -111,7 +121,7 @@ async function main() {
       log(`idling ${humanDuration(idle)}, then warming up ${humanDuration(WARMUP_LEAD)} early`);
       await sleep(idle);
     }
-    deadline = Date.now() + limits.sprintWindowMs;
+    deadline = Date.now() + sprintWindowMs();
   }
 
   browser = await chromium.launch();
@@ -179,7 +189,7 @@ async function main() {
       log(`primed with ${humanDuration(left)} to go; holding until the release`);
       await sleep(Math.max(0, left - 500));
     }
-    deadline = Date.now() + limits.sprintWindowMs;
+    deadline = Date.now() + sprintWindowMs();
   }
 
   let attempts = 0;
@@ -264,7 +274,7 @@ async function main() {
 
       // Three speeds. Hard through the first minute, eased through the rush,
       // then a slow patient watch for carts expiring unpaid.
-      const sinceStart = Date.now() - (deadline - limits.sprintWindowMs);
+      const sinceStart = Date.now() - (deadline - sprintWindowMs());
       let gap = limits.sprintEasedPollMs;
       if (sinceStart < limits.sprintHardMs) gap = limits.sprintPollMs;
       else if (sinceStart > limits.secondWaveAfterMs) gap = limits.secondWavePollMs;
@@ -275,7 +285,7 @@ async function main() {
     if (MODE === 'snipe') {
       await notify({
         title: 'Release came and went with nothing available',
-        body: `Sprinted for ${humanDuration(limits.sprintWindowMs)} after the release and never `
+        body: `Sprinted for ${humanDuration(sprintWindowMs())} after the release and never `
           + `saw space on either target sailing. The cancellation watch keeps running.`,
         priority: 'normal',
       });
