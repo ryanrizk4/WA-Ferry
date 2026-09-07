@@ -11,7 +11,11 @@ export const F = {
   toTerm: '#MainContent_dlToTermList',
   date: '#MainContent_txtDatePicker',
   vehicle: '#MainContent_dlVehicle',
-  height: '#MainContent_dlTempHeight',
+  // The height dropdown depends on the length chosen. For "under 22 feet"
+  // (value 3) the live control is this one, inside the .vehShow3 block;
+  // dlTempHeight exists on the page but is not the one being validated.
+  height: '#MainContent_ddlCarTruck14To22',
+  schedule: '#schedule',
   showAvailability: '#MainContent_linkBtnContinue',
   startOver: '#MainContent_linkBtnStartOver',
 };
@@ -105,8 +109,32 @@ export async function setDate(page, mmddyyyy) {
 export async function setVehicle(page, lengthValue, heightValue) {
   await page.selectOption(F.vehicle, lengthValue);
   await settle(page);
-  await page.selectOption(F.height, heightValue).catch(() => {});
+  // The height control is only rendered once a length is chosen, so wait for
+  // it rather than swallowing the failure — a missed height silently blocks
+  // the search behind "Please Select Vehicle Height".
+  await page.waitForSelector(F.height, { timeout: 15000 });
+  await page.selectOption(F.height, heightValue);
   await settle(page);
+}
+
+// The red text next to each field. When a search refuses to run, this says
+// exactly which field the server rejected.
+export async function readValidation(page) {
+  return page.evaluate(() => {
+    const ids = ['MainContent_cvFromTerm', 'MainContent_cvToTerm', 'MainContent_cvTravelDate',
+      'MainContent_cvVehicleLength', 'MainContent_cvVehicleHeight', 'MainContent_rfvCarTruck14To22',
+      'MainContent_regxCarTruck14To22'];
+    const out = {};
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      const st = getComputedStyle(el);
+      const shown = st.visibility !== 'hidden' && st.display !== 'none';
+      const msg = (el.innerText || '').trim();
+      if (shown && msg) out[id.replace('MainContent_', '')] = msg;
+    }
+    return out;
+  });
 }
 
 export async function showAvailability(page) {

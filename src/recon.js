@@ -1,9 +1,13 @@
-// Recon round two: drive the real Orcas Island -> Anacortes flow all the way to
-// the sailing list for each date we care about, and dump enough of the result
-// to write a parser against.
+// Recon round three.
 //
-// Runs on a GitHub Actions runner; the authoring container has no route to
-// wsdot.wa.gov.
+// Round two got the route in but stalled on two things: the date box has
+// maxlength=8 so a four-digit year never fit, and the height dropdown for a
+// car under 22 feet is a different control than the one being set. Height is
+// fixed in flow.js; the date format is still a guess, so probe candidates here
+// and let the page's own validation say which one it accepts.
+//
+// Then run the search and dump the sailing table, which is the thing the
+// checker actually has to read.
 
 import { chromium } from 'playwright';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -18,81 +22,87 @@ mkdirSync(OUT, { recursive: true });
 const log = (...a) => console.log(...a);
 const rule = (t) => log(`\n${'='.repeat(72)}\n${t}\n${'='.repeat(72)}`);
 
-// '2026-09-14' -> '09/14/2026', the format the date box expects.
-const usDate = (iso) => { const [y, m, d] = iso.split('-'); return `${m}/${d}/${y}`; };
+// Candidates, shortest first. maxlength=8 makes MM/DD/YY the favourite.
+const dateFormats = {
+  'MM/DD/YY': ([y, m, d]) => `${m}/${d}/${y.slice(2)}`,
+  'M/D/YY': ([y, m, d]) => `${+m}/${+d}/${y.slice(2)}`,
+  'MM/DD/YYYY': ([y, m, d]) => `${m}/${d}/${y}`,
+  'MMDDYYYY': ([y, m, d]) => `${m}${d}${y}`,
+};
 
 const browser = await chromium.launch();
 const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1440, height: 1200 } });
 const page = await ctx.newPage();
+page.on('console', (m) => { if (m.type() === 'error') log(`[console] ${m.text().slice(0, 160)}`); });
 
-page.on('console', (m) => { if (m.type() === 'error') log(`[console] ${m.text().slice(0, 200)}`); });
+const target = trip.targets[0];
+const iso = target.date.split('-');
 
-for (const target of trip.targets) {
-  rule(`TARGET: ${target.label} — ${target.date} (${target.earliest}-${target.latest})`);
-
+rule(`DATE FORMAT PROBE for ${target.date}`);
+let winner = null;
+for (const [name, fmt] of Object.entries(dateFormats)) {
+  const candidate = fmt(iso);
   try {
-    log(`landed on ${await flow.openSearch(page)}`);
-
+    await flow.openSearch(page);
     await flow.setRoute(page, String(trip.from.id), String(trip.to.id));
-    log(`route set: ${trip.from.name} (${trip.from.id}) -> ${trip.to.name} (${trip.to.id})`);
+    const shown = await flow.setDate(page, candidate);
+    const v = await flow.readValidation(page);
+    const rejected = Boolean(v.cvTravelDate);
+    log(`  ${name.padEnd(11)} sent "${candidate}" -> box reads "${shown}" ${rejected ? `REJECTED: ${v.cvTravelDate}` : 'ACCEPTED'}`);
+    if (!rejected && shown) { winner = candidate; break; }
+  } catch (e) {
+    log(`  ${name.padEnd(11)} sent "${candidate}" -> error: ${e.message.split('\n')[0]}`);
+  }
+}
+log(`\nwinning format: ${winner ?? 'NONE — every candidate was rejected'}`);
 
-    const dateShown = await flow.setDate(page, usDate(target.date));
-    log(`date box now reads: "${dateShown}" (wanted ${usDate(target.date)})`);
-
+if (winner) {
+  rule(`SEARCH: ${trip.from.name} -> ${trip.to.name} on ${target.date}`);
+  try {
     await flow.setVehicle(page, flow.VALUES.vehicleUnder22, flow.VALUES.heightUpTo72);
     log('vehicle set: under 22 feet, up to 7\'2" tall');
+    log(`validation before search: ${JSON.stringify(await flow.readValidation(page))}`);
 
     await flow.showAvailability(page);
-    log(`after Show Availability -> ${page.url()}`);
+    log(`search done -> ${page.url()}`);
+    log(`validation after search: ${JSON.stringify(await flow.readValidation(page))}`);
   } catch (e) {
-    log(`FLOW ERROR: ${e.message}`);
+    log(`SEARCH ERROR: ${e.message.split('\n')[0]}`);
   }
 
-  const slug = `avail-${target.date}`;
-  writeFileSync(`${OUT}/${slug}.html`, await page.content());
-  await page.screenshot({ path: `${OUT}/${slug}.png`, fullPage: true }).catch(() => {});
+  writeFileSync(`${OUT}/search.html`, await page.content());
+  await page.screenshot({ path: `${OUT}/search.png`, fullPage: true }).catch(() => {});
 
   const cap = await flow.detectCaptcha(page).catch((e) => ({ error: String(e) }));
-  log(`\n-- captcha probe --\n${JSON.stringify(cap, null, 2)}`);
+  log(`\n-- captcha probe --\n${JSON.stringify(cap)}`);
 
-  // The whole visible page, which is where the sailing list and its
-  // availability wording live.
-  const text = await page.evaluate(() => document.body?.innerText || '').catch(() => '');
-  log(`\n-- visible text --\n${text.replace(/\n{3,}/g, '\n\n').slice(0, 6000)}`);
+  // The sailing table. This is what the checker parses, so dump it raw.
+  const sched = await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    return el ? { found: true, text: el.innerText, html: el.innerHTML } : { found: false };
+  }, flow.F.schedule).catch((e) => ({ found: false, error: String(e) }));
 
-  // Raw markup of the sailing region, so the parser can be written against
-  // real class names instead of guesses.
-  const html = await page.evaluate(() => {
-    const pick = ['#MainContent_pnlSailings', '#MainContent_updSailings', '#MainContent_divSailings',
-      '[id*="Sailing" i]', '#MainContent_pnlAvailability', 'form'];
-    for (const s of pick) {
-      const el = document.querySelector(s);
-      if (el && el.innerHTML.length > 400) return { sel: s, html: el.innerHTML };
-    }
-    return { sel: 'body', html: document.body.innerHTML };
-  }).catch((e) => ({ sel: 'error', html: String(e) }));
+  if (!sched.found) {
+    log(`\n!! ${flow.F.schedule} not found ${sched.error ?? ''}`);
+  } else {
+    log(`\n-- #schedule visible text --\n${sched.text.slice(0, 4000)}`);
+    const clean = sched.html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/\s{2,}/g, ' ');
+    log(`\n-- #schedule markup (${clean.length} chars) --\n${clean.slice(0, 12000)}`);
+  }
 
-  const cleaned = html.html
-    .replace(/<script[\s\S]*?<\/script>/gi, '<!--script-->')
-    .replace(/<style[\s\S]*?<\/style>/gi, '<!--style-->')
-    .replace(/ (value|id|name)="(__VIEWSTATE|__EVENTVALIDATION)[^"]*"/gi, ' $1="<viewstate>"')
-    .replace(/value="[A-Za-z0-9+/=%]{200,}"/g, 'value="<long-blob>"')
-    .replace(/\s{2,}/g, ' ');
-  log(`\n-- sailing markup (from ${html.sel}, ${cleaned.length} chars) --\n${cleaned.slice(0, 14000)}`);
-
-  // Any control that could be a per-sailing "reserve this one" affordance.
-  const clickables = await page.evaluate(() => [...document.querySelectorAll('a,button,input[type=submit],input[type=radio]')]
-    .filter((el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; })
+  // Whatever the per-sailing affordance turns out to be.
+  const picks = await page.evaluate(() => [...document.querySelectorAll('#schedule a,#schedule button,#schedule input')]
     .map((el) => ({
       tag: el.tagName.toLowerCase(),
       id: el.id || '',
-      name: el.getAttribute('name') || '',
-      text: (el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 60),
-    }))
-    .filter((c) => /sail|reserv|select|book|depart|\d{1,2}:\d{2}/i.test(`${c.id} ${c.name} ${c.text}`)))
-    .catch(() => []);
-  log(`\n-- sailing-ish controls (${clickables.length}) --`);
-  for (const c of clickables) log(`  <${c.tag}> id=${c.id} name=${c.name} text="${c.text}"`);
+      cls: (el.getAttribute('class') || '').slice(0, 50),
+      onclick: (el.getAttribute('onclick') || el.getAttribute('href') || '').slice(0, 120),
+      text: (el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 50),
+    }))).catch(() => []);
+  log(`\n-- clickable things inside #schedule (${picks.length}) --`);
+  for (const p of picks.slice(0, 60)) log(`  <${p.tag}> id=${p.id} cls=${p.cls} text="${p.text}" -> ${p.onclick}`);
 }
 
 rule('DONE');
