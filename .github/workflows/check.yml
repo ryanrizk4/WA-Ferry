@@ -19,25 +19,12 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Cache the browser
-        id: pwcache
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
-
+      # Deliberately not cached. Restoring the cache and then reconciling apt
+      # packages was slower and far more erratic than this straight install,
+      # which lands in about twenty seconds every time. Predictability beats
+      # a theoretical saving when the job has to work at an exact minute.
       - name: Install Chromium
-        if: steps.pwcache.outputs.cache-hit != 'true'
         run: npx playwright install --with-deps chromium
-
-      - name: Install system deps for cached browser
-        if: steps.pwcache.outputs.cache-hit == 'true'
-        # apt here is erratic: seventeen seconds one run, many minutes the
-        # next. The runner image already ships the libraries Chromium needs,
-        # so bound this and carry on rather than let it eat the warm-up window
-        # before a release. If deps really were missing, the browser fails to
-        # launch and the run says so loudly.
-        run: timeout 150 npx playwright install-deps chromium || echo "skipping deps; runner image should already have them"
 
       - name: Report what is open
         run: npm run check
