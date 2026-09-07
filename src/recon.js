@@ -31,7 +31,7 @@ await prepareSearch(page, trip);
 let bookable = null;
 for (const target of trip.targets) {
   rule(`AVAILABILITY: ${target.date} — ${target.label}`);
-  const res = await searchDate(page, target.date);
+  const res = await searchDate(page, target.date, trip);
   if (!res.ok) { log(`  ${res.reason}`); continue; }
   log(`  ${res.heading}`);
   for (const r of res.rows) {
@@ -39,6 +39,18 @@ for (const target of trip.targets) {
     log(`  ${mark} ${r.depart.padEnd(9)} ${r.vessel.padEnd(10)} ${r.spacesText}`);
     if (r.bookable && !bookable) bookable = { ...r, date: target.date };
   }
+
+  // Which of the form controls survive a search? This decides whether a
+  // repeat check can reuse the page or has to rebuild it, which matters a lot
+  // when polling every couple of seconds during a release.
+  const census = await page.evaluate(() => Object.fromEntries(
+    [['showAvailability', '#MainContent_linkBtnContinue'], ['date', '#MainContent_txtDatePicker'],
+      ['fromTerm', '#MainContent_dlFromTermList'], ['vehicle', '#MainContent_dlVehicle'],
+      ['height', '#MainContent_ddlCarTruck14To22'], ['startOver', '#MainContent_linkBtnStartOver'],
+      ['grid', '#MainContent_gvschedule']]
+      .map(([k, sel]) => [k, Boolean(document.querySelector(sel))]),
+  ));
+  log(`  controls after search: ${JSON.stringify(census)}`);
 }
 
 if (!bookable) {
@@ -51,7 +63,7 @@ if (!bookable) {
 
   // The results table is rebuilt on each search, so re-run the date we want
   // before clicking into it.
-  await searchDate(page, bookable.date);
+  await searchDate(page, bookable.date, trip);
   await page.click(`#${bookable.radioId}`);
   await page.waitForTimeout(3000);
 

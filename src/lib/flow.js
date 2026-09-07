@@ -34,6 +34,18 @@ export const START_URL =
   'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx';
 const HOME_MAKE_RESERVATION = '#linkBtnContinue';
 
+export const HOME_URL =
+  'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/default.aspx';
+
+// Account login lives on the home page. Worth doing before the release rather
+// than during it: an authenticated session reaches the saved payment method
+// without retyping anything, and those are seconds we will not have to spare.
+export const LOGIN = {
+  email: '#txtEmailID',
+  password: '#txtPassword',
+  submit: '#btnLoginAccount',
+};
+
 // Waiting for the UpdatePanel to finish its partial postback.
 //
 // Do NOT use networkidle here. These pages hold open analytics beacons to
@@ -43,6 +55,11 @@ const HOME_MAKE_RESERVATION = '#linkBtnContinue';
 //
 // ASP.NET AJAX tells us directly whether a postback is in flight, so ask it.
 async function settle(page, ms = 250) {
+  // Every control on this page starts its postback from inside a
+  // setTimeout(..., 0), so immediately after a click or a change nothing is in
+  // flight yet and the check below would pass instantly. Give the queued
+  // callback a moment to actually fire before believing the answer.
+  await page.waitForTimeout(120);
   await page.waitForFunction(() => {
     const prm = window.Sys?.WebForms?.PageRequestManager;
     if (!prm) return true; // no AJAX on this page; nothing to wait for
@@ -67,6 +84,35 @@ export async function openSearch(page) {
   }
   await page.waitForSelector(F.fromTerm, { timeout: 20000 });
   return page.url();
+}
+
+// Returns true when the session is authenticated. Never logs the credentials
+// themselves, only whether they worked.
+export async function login(page, email, password) {
+  if (!email || !password) return { ok: false, reason: 'no WSF credentials configured' };
+
+  await page.goto(HOME_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await settle(page);
+
+  if (!(await page.locator(LOGIN.email).count())) {
+    return { ok: true, reason: 'no login form present; already signed in' };
+  }
+
+  await page.fill(LOGIN.email, email);
+  await page.fill(LOGIN.password, password);
+  await page.click(LOGIN.submit);
+  await settle(page, 1500);
+
+  // A failed login leaves the form up with an error; a good one replaces it.
+  const stillOnForm = await page.locator(LOGIN.password).count();
+  const err = await page.evaluate(() => {
+    const box = document.querySelector('#errorMessage1, #errorMessage');
+    return (box?.innerText || '').replace(/\s+/g, ' ').trim();
+  }).catch(() => '');
+
+  if (stillOnForm && err) return { ok: false, reason: `login rejected: ${err}` };
+  if (stillOnForm) return { ok: false, reason: 'login form still showing; credentials likely wrong' };
+  return { ok: true, reason: 'signed in' };
 }
 
 export async function setRoute(page, fromValue, toValue) {
@@ -139,7 +185,30 @@ export async function readValidation(page) {
 
 export async function showAvailability(page) {
   await page.click(F.showAvailability, { timeout: 15000 });
-  await settle(page, 600);
+
+  // Wait for a real outcome rather than for the network to look quiet: either
+  // the results grid arrives, or the page complains about one of the fields.
+  // Reading the page before this resolves is how a search silently comes back
+  // "no sailings" when it simply had not finished.
+  await page.waitForFunction(() => {
+    if (document.querySelector('#MainContent_gvschedule')) return true;
+    const ids = ['MainContent_cvTravelDate', 'MainContent_cvFromTerm', 'MainContent_cvToTerm',
+      'MainContent_cvVehicleLength', 'MainContent_rfvCarTruck14To22'];
+    return ids.some((id) => {
+      const el = document.getElementById(id);
+      if (!el) return false;
+      const st = getComputedStyle(el);
+      return st.visibility !== 'hidden' && st.display !== 'none' && el.innerText.trim() !== '';
+    });
+  }, null, { timeout: 25000 });
+  await settle(page);
+}
+
+// Is the search form currently usable, or has the page moved on to results or
+// checkout? Cheap enough to ask before every search.
+export async function searchFormReady(page) {
+  return (await page.locator(F.showAvailability).count()) > 0
+    && (await page.locator(F.date).count()) > 0;
 }
 
 // Anything that looks like a bot check. Worth knowing about separately from a

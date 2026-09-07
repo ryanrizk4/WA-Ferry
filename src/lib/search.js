@@ -65,7 +65,14 @@ function to24h(t) {
   return `${String(h).padStart(2, '0')}:${m[2]}`;
 }
 
-export async function searchDate(page, isoDate) {
+export async function searchDate(page, isoDate, trip) {
+  // Running a search consumes the form: the page swaps in results and the
+  // Show Availability button goes away. Before each search, make sure we are
+  // looking at a form we can actually drive, and rebuild it if not.
+  if (!(await flow.searchFormReady(page))) {
+    if (!trip) throw new Error('search form is gone and no trip given to rebuild it');
+    await prepareSearch(page, trip);
+  }
   await flow.setDate(page, wsfDate(isoDate));
   const bad = await flow.readValidation(page);
   if (bad.cvTravelDate) throw new Error(`date rejected: ${bad.cvTravelDate}`);
@@ -80,7 +87,7 @@ export async function findAvailability(page, trip) {
 
   const matches = [];
   for (const target of trip.targets) {
-    const res = await searchDate(page, target.date);
+    const res = await searchDate(page, target.date, trip);
     if (!res.ok) {
       console.log(`  ${target.date}: ${res.reason}`);
       continue;

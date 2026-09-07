@@ -44,20 +44,23 @@ async function main() {
   for (const t of trip.targets) log(`  target: ${t.label} ${t.date} ${t.earliest}-${t.latest}`);
 
   let deadline = Date.now(); // when to stop looking
+  let release = null;
   if (MODE === 'snipe') {
-    const rel = currentRelease();
-    if (!rel) {
+    release = currentRelease();
+    if (!release) {
       log('no release is due within the hour; nothing to snipe. Exiting cleanly.');
       return;
     }
-    log(`release: ${rel.wave} at ${rel.at} PT (${humanDuration(rel.ms)} away)`);
+    log(`release: ${release.wave} at ${release.at} PT (${humanDuration(release.ms)} away)`);
 
-    // Wake a couple of seconds early so the first request is already in flight
-    // when the inventory flips, rather than starting from a cold page load.
-    const lead = 3000;
-    if (rel.ms > lead) {
-      log(`sleeping ${humanDuration(rel.ms - lead)} until just before the release`);
-      await sleep(rel.ms - lead);
+    // Sit idle until shortly before the release, then warm up. Two minutes is
+    // enough to sign in and load the search form, and short enough that the
+    // session will not have gone stale by 7:00:00.
+    const WARMUP_LEAD = 120_000;
+    const idle = release.ms - WARMUP_LEAD;
+    if (idle > 0) {
+      log(`idling ${humanDuration(idle)}, then warming up ${humanDuration(WARMUP_LEAD)} early`);
+      await sleep(idle);
     }
     deadline = Date.now() + limits.sprintWindowMs;
   }
@@ -66,8 +69,38 @@ async function main() {
   const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1440, height: 1200 } });
   const page = await ctx.newPage();
 
-  const { findAvailability } = await import('./lib/search.js');
+  const { findAvailability, prepareSearch } = await import('./lib/search.js');
   const { bookSailing } = await import('./lib/booking.js');
+  const flow = await import('./lib/flow.js');
+
+  // Sign in first. The account has a payment method saved, so an authenticated
+  // session skips the slowest part of checkout. A failed login is not fatal
+  // here — better to keep looking and report honestly than to bail — but it
+  // does mean booking will not complete, so say so loudly.
+  const auth = await flow.login(page, process.env.WSF_EMAIL, process.env.WSF_PASSWORD);
+  log(`login: ${auth.ok ? 'OK' : 'FAILED'} — ${auth.reason}`);
+  if (!auth.ok && !DRY_RUN) {
+    await notify({
+      title: 'WSF login failed — the bot cannot book',
+      body: `${auth.reason}\n\nCheck the WSF_EMAIL and WSF_PASSWORD repository secrets. `
+        + `Until this is fixed the run can see space but cannot take it.`,
+      priority: 'high',
+    });
+  }
+
+  // Load the search form and set everything that does not change, so the
+  // moment the release lands we are one postback away from an answer.
+  await prepareSearch(page, trip);
+  log('search form primed: route and vehicle set');
+
+  if (release) {
+    const remaining = msUntil(release.at);
+    if (remaining > 0) {
+      log(`primed with ${humanDuration(remaining)} to go; holding until the release`);
+      await sleep(Math.max(0, remaining - 500));
+    }
+    deadline = Date.now() + limits.sprintWindowMs;
+  }
 
   let attempts = 0;
   let pass = 0;
