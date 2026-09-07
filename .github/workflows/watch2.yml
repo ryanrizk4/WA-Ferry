@@ -93,6 +93,7 @@ jobs:
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
           if [ -f out/stop-watching ]; then
             echo "standing down: $(cat out/stop-watching)"
@@ -106,9 +107,26 @@ jobs:
             exit 0
           fi
           echo "handing off to the next watch run"
-          curl -sS -X POST \
+          code=$(curl -sS -o /tmp/dispatch.out -w '%{http_code}' -X POST \
             -H "authorization: Bearer $GH_TOKEN" \
             -H "accept: application/vnd.github+json" \
             "https://api.github.com/repos/${{ github.repository }}/actions/workflows/watch.yml/dispatches" \
-            -d '{"ref":"${{ github.ref_name }}"}' \
-            -w 'dispatch HTTP %{http_code}\n'
+            -d '{"ref":"${{ github.ref_name }}"}')
+          echo "dispatch HTTP $code"
+          if [ "$code" = "204" ]; then
+            exit 0
+          fi
+
+          # A failed hand-off means the watch has just stopped, and every way
+          # that has gone wrong in this project so far has been silent. A red
+          # run in a tab nobody is looking at is not good enough, so say it out
+          # loud on the phone.
+          cat /tmp/dispatch.out || true
+          if [ -n "$NTFY_TOPIC" ]; then
+            curl -sS -X POST "https://ntfy.sh/$NTFY_TOPIC" \
+              -H "title: FERRY WATCH STOPPED - it needs restarting" \
+              -H "priority: urgent" \
+              -H "tags: warning" \
+              -d "The watch could not start its next run (HTTP $code), so nothing is looking for cancellations right now. Open the repository's Actions tab and run 'Watch for cancellations' by hand." || true
+          fi
+          exit 1
