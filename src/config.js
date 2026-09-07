@@ -116,6 +116,32 @@ export const limits = {
   // week of nothing.
   idlePollMs: 45_000,
 
+  // Faster polling through the hours that actually produce space.
+  //
+  // This is not a guess. WSF's own rules, read off their FAQ, say a
+  // reservation must be cancelled before 5 p.m. Pacific the day before travel
+  // to avoid a no-show fee, and that one further change is allowed after that
+  // at no charge. So the day before each sailing is when people who are not
+  // going give their space back, the 5 p.m. cutoff is the peak, and space
+  // keeps trickling out afterwards as everyone who moves to a different
+  // sailing releases the one they left.
+  //
+  // Polling three times as often through those hours was unaffordable while
+  // Actions minutes were metered. On a public repository it is free, so the
+  // effort goes where the odds are.
+  hotPollMs: 15_000,
+  hotWindows: [
+    // The day before Sunday travel, through its 5 p.m. deadline and after.
+    { from: '2026-09-12T08:00:00', to: '2026-09-12T23:59:00', why: 'day before Sunday sailings' },
+    // The day before Monday travel. This is the important one: Monday is the
+    // preferred day and this is the last full day of cancellations for it.
+    { from: '2026-09-13T08:00:00', to: '2026-09-13T23:59:00', why: 'day before Monday sailings' },
+    // Nothing can be cancelled inside two hours of a sailing, so space for the
+    // 7:05 a.m. Monday boat stops being returnable at about 5:05 a.m. This is
+    // the last chance before that door closes.
+    { from: '2026-09-14T00:00:00', to: '2026-09-14T05:05:00', why: 'final hours before the Monday morning lockout' },
+  ],
+
   // How long each triggered run keeps looking.
   //
   // Sized for how unreliably the trigger fires, not for how often we would

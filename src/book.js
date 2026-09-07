@@ -105,6 +105,27 @@ async function withRetry(fn, what, attempts = 2) {
 // process — none of them write this file, so none of them can quietly end the
 // watch. Only the two real endings do: the reservation is made, or the boat
 // has sailed.
+// How hard to poll right now, in watch mode.
+//
+// Most of the time 45 seconds is plenty and is polite to a public agency's
+// servers. But the hours before each 5 p.m. cancellation deadline are where
+// the space actually comes from, and being three times as likely to be
+// looking at the right moment is the single cheapest improvement available
+// now that minutes are unmetered. See hotWindows in config.js for why those
+// particular hours.
+function watchPollMs() {
+  const hot = (limits.hotWindows ?? []).find(
+    (w) => msUntil(w.from) <= 0 && msUntil(w.to) > 0,
+  );
+  if (!hot) return limits.idlePollMs;
+  if (watchPollMs.said !== hot.why) {
+    watchPollMs.said = hot.why;
+    log(`in a high-value window (${hot.why}): checking every `
+      + `${humanDuration(limits.hotPollMs)} instead of ${humanDuration(limits.idlePollMs)}`);
+  }
+  return limits.hotPollMs;
+}
+
 function standDown(why) {
   try {
     mkdirSync('out', { recursive: true });
@@ -369,7 +390,10 @@ async function main() {
       }
 
       if (Date.now() >= deadline) break;
-      if (MODE === 'watch') { await sleep(limits.idlePollMs); continue; }
+      if (MODE === 'watch') {
+        await sleep(watchPollMs());
+        continue;
+      }
 
       // Three speeds. Hard through the first minute, eased through the rush,
       // then a slow patient watch for carts expiring unpaid.
