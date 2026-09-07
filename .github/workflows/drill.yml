@@ -1,0 +1,33 @@
+name: Alert drill
+
+# Sends the real availability alert, about a real sailing that really has
+# space, so the notification has been seen and heard before the night it
+# matters. Books nothing: the drill script does not import the booking code.
+#
+# Runs on request, and when the drill script changes.
+on:
+  push:
+    branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
+    paths: ['src/drill.js']
+  workflow_dispatch:
+
+jobs:
+  drill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Send the drill alert
+        env:
+          WSF_EMAIL: ${{ secrets.WSF_EMAIL }}
+          WSF_PASSWORD: ${{ secrets.WSF_PASSWORD }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: node src/drill.js
