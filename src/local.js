@@ -105,13 +105,55 @@ if (releaseAt) {
 }
 
 let pass = 0;
+let consecutiveFailures = 0;
+let lastHeartbeat = 0;
+
 for (;;) {
   pass += 1;
   let found = [];
   try {
     found = await findAvailability(page, trip);
+    consecutiveFailures = 0;
   } catch (e) {
-    log(`check ${pass} failed: ${e.message.split('\n')[0]}`);
+    consecutiveFailures += 1;
+    log(`check ${pass} failed (${consecutiveFailures} in a row): ${e.message.split('\n')[0]}`);
+
+    // Sessions expire and pages get into states they cannot be argued out of.
+    // Left alone, every later check fails the same way and the watch is dead
+    // while still looking alive in the terminal. So rebuild from scratch.
+    if (consecutiveFailures >= 3) {
+      log('rebuilding the session: signing in again and reloading the form');
+      try {
+        const again = await flow.login(page, process.env.WSF_EMAIL, process.env.WSF_PASSWORD);
+        log(`  sign in: ${again.ok ? 'OK' : 'FAILED'} - ${again.reason}`);
+        await prepareSearch(page, trip);
+        log('  form rebuilt, carrying on');
+        consecutiveFailures = 0;
+      } catch (e2) {
+        log(`  rebuild failed: ${e2.message.split('\n')[0]}`);
+        if (consecutiveFailures >= 10) {
+          banner('WATCH HAS STOPPED WORKING\n'
+            + 'Ten checks in a row failed and signing in again did not help.\n'
+            + 'Close this and start it again. Until you do, nothing is watching\n'
+            + 'from this laptop.');
+          await notify({
+            title: 'Ferry watch on your laptop has stopped',
+            body: 'The local watcher failed repeatedly and could not recover. '
+              + 'Restart it, or rely on the cloud watcher until you do.',
+            priority: 'high',
+            issue: false,
+          }).catch(() => {});
+          process.exit(1);
+        }
+      }
+    }
+  }
+
+  // Proof of life. A silent terminal for hours is indistinguishable from a
+  // dead one, and the whole point is that you can trust it while asleep.
+  if (Date.now() - lastHeartbeat > 15 * 60_000) {
+    lastHeartbeat = Date.now();
+    log(`still watching. ${pass} checks so far, nothing open yet.`);
   }
 
   if (found.length) {
