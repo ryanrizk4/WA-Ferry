@@ -1,17 +1,12 @@
-name: Recon WSF reservation site
+name: Check availability
 
 on:
   push:
     branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
   workflow_dispatch:
-    inputs:
-      entry_url:
-        description: Entry URL to start the recon walk from
-        required: false
-        default: https://secureapps.wsdot.wa.gov/Ferries/Reservations/Vehicle/default.aspx
 
 jobs:
-  recon:
+  check:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -39,15 +34,13 @@ jobs:
         if: steps.pwcache.outputs.cache-hit == 'true'
         run: npx playwright install-deps chromium
 
-      - name: Run recon
-        env:
-          ENTRY_URL: ${{ inputs.entry_url }}
-        run: npm run recon
+      - name: Report what is open
+        run: npm run check
 
       - name: Upload page dumps
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: recon-output
+          name: check-output
           path: out/
           retention-days: 7
