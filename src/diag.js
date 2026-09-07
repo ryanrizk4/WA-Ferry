@@ -165,9 +165,15 @@ try {
       + (interesting ? sel.options.join(' | ') : `${sel.options.length} options`));
   }
 
-  // "Up to 7'2\" tall" is the traveller's vehicle. Match on the text so this
-  // does not depend on the value being the same as the desktop site's.
-  const heightSel = afterVehicle.selects.filter((sel) => /height/i.test(sel.id));
+  // "Up to 7'2\" tall" is the traveller's vehicle. Match on the OPTION TEXT,
+  // not on the control's name. The previous run failed here for exactly that
+  // reason: choosing the length swaps dlTempHeight out for ddlCarTruck14To22,
+  // whose name says nothing about height, so a name-based filter found
+  // nothing and the search never ran. The same trap cost a day on the desktop
+  // site. What a dropdown offers is the reliable identifier; what it is called
+  // is not.
+  const heightSel = afterVehicle.selects.filter((sel) =>
+    sel.options.some((o) => /up to 7.?2/i.test(o)));
   let chosenHeight = null;
   for (const sel of heightSel) {
     const opt = sel.options.find((o) => /up to 7.?2/i.test(o));
