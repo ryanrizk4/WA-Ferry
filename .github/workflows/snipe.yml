@@ -24,6 +24,9 @@ on:
     # 14th in UTC while landing on the afternoon of the 12th and 13th Pacific.
     - cron: '20 23 12,13 9 *'   # 16:20 PT Sept 12 and 13
     - cron: '30 23 12,13 9 *'   # 16:30 PT Sept 12 and 13
+    # Monday morning, before the two-hour lockout closes the door on the 7:05.
+    - cron: '10 11 14 9 *'      # 04:10 PT Sept 14
+    - cron: '20 11 14 9 *'      # 04:20 PT Sept 14
   # Independent of GitHub's scheduler. Touching this file starts a snipe run,
   # which gives a second, unrelated way to fire at 7 a.m. if cron does not.
   push:

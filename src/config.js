@@ -74,7 +74,33 @@ export const releases = [
   // it valuable.
   { at: '2026-09-12T17:00:00', kind: 'cancellation', wave: 'cancellation deadline for Sunday Sept 13' },
   { at: '2026-09-13T17:00:00', kind: 'cancellation', wave: 'cancellation deadline for Monday Sept 14' },
+
+  // The last moment anyone can hand back a Monday-morning seat.
+  //
+  // WSF, verbatim: "No changes or cancellations can be made less than two
+  // hours before your reserved sailing." So the 7:05 a.m. Monday sailing stops
+  // accepting cancellations at 5:05 a.m., and the 8:50 at 6:50. After that the
+  // only thing that frees a space is a no-show, which shows up at the terminal
+  // rather than on the website.
+  //
+  // Between 5 p.m. Sunday and those cutoffs there is also a steady trickle,
+  // because WSF allows one final change after the deadline at no charge, and
+  // every person who moves to a different sailing releases the one they left.
+  { at: '2026-09-14T04:50:00', kind: 'final-cutoff', wave: 'last chance for Monday morning space before the two-hour lockout' },
 ];
+
+// Verified from WSF's own reservation FAQ on 2026-09-07:
+//   - change or cancel before 5:00 p.m. PT the day before travel, or pay a
+//     no-show fee;
+//   - one final change allowed after that, free, but cancelling after it still
+//     incurs the fee;
+//   - nothing can be changed or cancelled inside two hours of the sailing;
+//   - multiple reservations are allowed, but an unused one earns a no-show fee,
+//     which is why this never books a second sailing as a hedge.
+export const cancellationRules = {
+  deadlineLocal: '17:00',
+  lockoutHoursBeforeSailing: 2,
+};
 
 // Politeness and safety limits. These are not negotiable knobs to crank: WSF
 // runs this on public infrastructure, and hammering it is both rude and the

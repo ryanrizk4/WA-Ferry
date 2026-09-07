@@ -198,6 +198,14 @@ Things learned the hard way, recorded so they are not relearned:
   the terminals come back as -1 and no grid renders. There is no URL that
   lands someone on a filled-in sailing list, which is why the run warns a
   human early enough to set the form up by hand before the release.
+- **The cancellation rules, verified from WSF's FAQ.** Change or cancel before
+  **5:00 p.m. PT the day before travel** or pay a no-show fee. One final change
+  is allowed after that, free, but cancelling after it still incurs the fee.
+  **Nothing can be changed or cancelled inside two hours of the sailing.**
+  Multiple reservations are allowed but an unused one earns a no-show fee.
+  Together these say exactly when space comes back: a cluster at the 5 p.m.
+  deadline, a trickle afterwards from people making their one free change, and
+  a hard stop two hours before each sailing.
 - **Notification titles must be plain ASCII.** ntfy takes the title as an HTTP
   header, headers carry bytes rather than text, and one em dash threw
   `Cannot convert argument to a ByteString` before the request was sent. No
