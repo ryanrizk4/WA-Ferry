@@ -26,7 +26,17 @@ import { chromium, devices } from 'playwright';
 import { trip } from './config.js';
 import { wsfDate } from './lib/search.js';
 
-const log = (...a) => console.log(...a);
+// Findings are buffered and printed together at the end. Reading these runs
+// means tailing the log, and the control dumps are long enough to push the
+// actual answer out of reach — which has now happened twice.
+const lines = [];
+const log = (...a) => { lines.push(a.join(' ')); };
+const flush = () => {
+  console.log('\n\n' + '#'.repeat(70));
+  console.log('# SUMMARY');
+  console.log('#'.repeat(70));
+  console.log(lines.join('\n'));
+};
 const rule = (t) => log(`\n${'='.repeat(70)}\n${t}\n${'='.repeat(70)}`);
 const j = (x) => JSON.stringify(x, null, 2);
 
@@ -92,15 +102,11 @@ try {
   const before = await controls(page);
   log('\n  -- dropdowns on the search page --');
   for (const sel of before.selects) {
-    log(`    ${sel.id}  [${sel.size}]  ${sel.options.slice(0, 9).join(' | ')}`);
+    log(`    ${sel.id}  [${sel.size}]  ${sel.options.length} options`);
   }
-  log('\n  -- inputs and buttons (size matters: 44px is thumb-friendly) --');
-  for (const i of before.inputs) {
-    log(`    ${i.id}  type=${i.type}  [${i.size}]  value=${JSON.stringify(i.value)}`);
-  }
-  log('\n  -- links out (is there a way back to the full site?) --');
-  for (const l of before.links.filter((x) => /full|desktop|site/i.test(x.text))) {
-    log(`    "${l.text}"  [${l.size}]`);
+  log('\n  -- buttons and text boxes --');
+  for (const i of before.inputs.filter((x) => x.type !== 'radio')) {
+    log(`    ${i.id}  ${i.type}  [${i.size}]  ${JSON.stringify(i.value).slice(0, 40)}`);
   }
 
   rule('2. Can the search be driven with a thumb?');
@@ -154,7 +160,9 @@ try {
   const afterVehicle = await controls(page);
   log('\n  -- dropdowns AFTER choosing "vehicle under 22 feet" --');
   for (const sel of afterVehicle.selects) {
-    log(`    ${sel.id}  [${sel.size}]  ${sel.options.join(' | ')}`);
+    const interesting = /height/i.test(sel.id);
+    log(`    ${sel.id}  [${sel.size}]  `
+      + (interesting ? sel.options.join(' | ') : `${sel.options.length} options`));
   }
 
   // "Up to 7'2\" tall" is the traveller's vehicle. Match on the text so this
@@ -171,10 +179,15 @@ try {
       chosenHeight = `${sel.id} = ${opt}`;
       break;
     } catch (e) {
-      log(`    (could not set ${sel.id}: ${e.message.split('\n')[0]})`);
+      log(`    could not set ${sel.id}: ${e.message.split('\n')[0].slice(0, 90)}`);
     }
   }
   log(`  height set: ${chosenHeight ?? 'FAILED - no height dropdown accepted a value'}`);
+  const selected = await page.evaluate(() =>
+    [...document.querySelectorAll('select')].map(
+      (s) => `${s.id}=${s.value}${s.offsetParent === null ? ' (hidden)' : ''}`,
+    ));
+  log(`  what the page believes is selected: ${selected.join('  ')}`);
 
   rule('3. Does it return a sailing list, and can a thumb hit the rows?');
   const showBtn = afterVehicle.inputs.find((i) => /show/i.test(i.value || ''))
@@ -209,7 +222,7 @@ try {
       radios,
       widerThanScreen:
         document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      text: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 900),
+      text: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 500),
     };
   });
   log(`  tables with more than 2 rows (a sailing list would be one): `
@@ -233,4 +246,5 @@ try {
   log(`  page said: ${text}`);
 } finally {
   await browser.close();
+  flush();
 }
