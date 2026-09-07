@@ -10,7 +10,7 @@ name: Snipe reservation release
 # remaining time and sprints at the exact second.
 on:
   schedule:
-    - cron: '40 13 11,12 9 *'   # 06:40 PT — 20 minutes of headroom for cron drift
+    - cron: '30 13 11,12 9 *'   # 06:30 PT — 30 minutes of headroom for cron drift
   workflow_dispatch:
     inputs:
       dry_run:
@@ -25,7 +25,7 @@ concurrency:
 jobs:
   snipe:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     permissions:
       issues: write
     steps:

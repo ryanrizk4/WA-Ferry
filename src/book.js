@@ -178,7 +178,14 @@ async function main() {
       }
 
       if (Date.now() >= deadline) break;
-      await sleep(limits.sprintPollMs);
+      if (MODE !== 'snipe') break; // watch mode is a single pass
+
+      // Hard for the first minute, easier after. Sprint start is the deadline
+      // minus the full window, so this measures time since the release.
+      const sinceStart = Date.now() - (deadline - limits.sprintWindowMs);
+      await sleep(sinceStart < limits.sprintHardMs
+        ? limits.sprintPollMs
+        : limits.sprintEasedPollMs);
     } while (Date.now() < deadline);
 
     log(`finished after ${pass} pass(es); no reservation made`);

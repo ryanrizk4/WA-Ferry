@@ -57,9 +57,13 @@ export const releases = [
 export const limits = {
   // Gap between availability checks during ordinary cancellation watching.
   idlePollMs: 60_000,
-  // Gap during the final seconds before a known release, when inventory is
-  // genuinely changing.
+  // Gap between checks during a release. The first minute is where a release
+  // is won or lost, so poll hard then and ease off after: a steady one request
+  // a second for ten minutes is both rude and pointless once the initial rush
+  // has cleared.
   sprintPollMs: 1_000,
+  sprintHardMs: 60_000,
+  sprintEasedPollMs: 3_000,
   // How long to keep sprinting after a release fires before giving up.
   sprintWindowMs: 10 * 60_000,
   // Never attempt more than this many bookings in one run, whatever happens.
