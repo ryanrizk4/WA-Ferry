@@ -24,6 +24,34 @@ these dates have passed. The two-day waves are:
 
 Space also reappears at random when other people cancel.
 
+## The route that needs no reservation at all
+
+From WSF's own page, verbatim:
+
+> There are no reservations for vehicles going from Shaw Island or Lopez
+> Island (eastbound) to Anacortes. Vehicles from these terminals are loaded
+> on a first-come, first-served basis.
+
+Orcas is not on that list, which is why getting off Orcas is a lottery. But
+Lopez and Shaw are, and interisland sailings inside the San Juans do not take
+vehicle reservations either. So there is a path that skips the whole 7 a.m.
+scramble:
+
+**Orcas to Lopez or Shaw on an interisland sailing, then Lopez or Shaw to
+Anacortes first-come, first-served.**
+
+No release to win, no captcha, no bot. It becomes a queueing problem instead
+of a lottery: turn up early and wait in the lane.
+
+The catch is real and worth stating plainly. The Anacortes-bound boat calls at
+the islands in sequence and arrives at Lopez already carrying reserved
+vehicles from Orcas and Friday Harbor, so the space left can be thin, and a
+bad day means waiting for the next sailing. But it is a fallback that does not
+depend on beating anyone to a button, and it is worth knowing about before
+Sunday rather than after.
+
+Check the interisland schedule for the day, since the connection has to work.
+
 ## What it does
 
 Everything runs on GitHub Actions, so nothing has to stay open on a laptop.
