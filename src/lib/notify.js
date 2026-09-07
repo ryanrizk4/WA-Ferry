@@ -7,6 +7,17 @@
 // Two channels, both optional, both fire-and-forget: a failure to notify must
 // never take down a run that is mid-booking.
 
+// Set by the watcher when the sailing it alerted about is no longer open, so
+// the repeats stop instead of nagging about a chance that has passed.
+let stopRepeating = false;
+// Each urgent push starts a repeat loop, and a later one must supersede the
+// earlier rather than run beside it. Without this, alerting once a minute
+// about a sailing that stays open would stack loop on loop and turn a useful
+// alarm into something that gets the app muted.
+let repeatGeneration = 0;
+export function callOffRepeats() { stopRepeating = true; repeatGeneration += 1; }
+export function resumeRepeats() { stopRepeating = false; }
+
 const gh = {
   token: process.env.GITHUB_TOKEN,
   repo: process.env.GITHUB_REPOSITORY,
@@ -46,12 +57,28 @@ function asciiHeader(s) {
 const BOOKING_URL =
   'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx';
 
-// One push is easy to sleep through, and a missed cancellation is the whole
-// failure mode this project exists to prevent. Urgent alerts are therefore
-// repeated: same message, a few times, a short gap apart. Three is enough to
-// beat a phone face-down on a nightstand without becoming its own problem.
-const URGENT_REPEATS = 3;
-const REPEAT_GAP_MS = 25_000;
+// One push is easy to miss, and that is not a theory any more. On 7 September
+// the watcher found space on the 8:50 a.m. Monday sailing, the single most
+// wanted boat of the trip, and sent the alert at 11:57:58. It was seen too
+// late and the space was gone.
+//
+// The priority was already at maximum and still is: ntfy's "urgent" is its
+// level 5, and there is nothing above it. So the fix is not priority, it is
+// persistence. Three buzzes over fifty seconds is a thing you can miss by
+// being in another room. Twenty-four buzzes over six minutes is not.
+//
+// The repeats stop early if the space is gone, because the watcher re-checks
+// between them and only keeps alerting while there is still something to act
+// on. Nothing here is worth alarming somebody about after the chance has
+// passed.
+const URGENT_REPEATS = 24;
+const REPEAT_GAP_MS = 15_000;
+
+// A ringing phone beats a notification, and ntfy will place an actual phone
+// call for a priority-5 message. It needs a paid ntfy account with a verified
+// number, so it is off unless NTFY_CALL_NUMBER is set, and its absence
+// changes nothing.
+const CALL_NUMBER = process.env.NTFY_CALL_NUMBER;
 
 // ntfy.sh delivers a push to a phone with no account, given a topic name that
 // is unguessable enough to act as its own secret.
@@ -59,30 +86,41 @@ async function pushNtfy(title, body, priority) {
   const topic = process.env.NTFY_TOPIC;
   if (!topic) return 'skipped (no NTFY_TOPIC)';
   const urgent = priority === 'high';
-  const send = (t) => fetch(`https://ntfy.sh/${topic}`, {
+  const send = (t, extra = {}) => fetch(`https://ntfy.sh/${topic}`, {
     method: 'POST',
     headers: {
       title: t.slice(0, 200),
-      // 'urgent' is ntfy's top priority. On a phone that means it can ring
-      // through a silenced ringer, but only if the ntfy app itself has been
+      // "urgent" is ntfy's top priority, its level 5. On a phone that means it
+      // can ring through a silenced ringer, but only if the ntfy app has been
       // allowed to: iOS needs notifications set to Time Sensitive, Android
-      // needs the channel exempted from Do Not Disturb. Nothing sent from
-      // this end can force that; it is a setting on the phone.
+      // needs the channel exempted from Do Not Disturb. Nothing sent from this
+      // end can force that; it is a setting on the phone.
       priority: urgent ? 'urgent' : 'default',
       tags: urgent ? 'ferry,rotating_light' : 'ferry',
       // Makes the notification itself a link straight to the search page.
       click: BOOKING_URL,
+      ...extra,
     },
     body: body.slice(0, 3000),
   });
+
+  // Ring the phone once, on the first urgent push only. Repeated calls would
+  // be worse than useless: the phone is engaged while it rings, which is
+  // exactly when somebody is trying to use it to book.
+  if (urgent && CALL_NUMBER) {
+    send(asciiHeader(title), { call: CALL_NUMBER }).catch(() => {});
+  }
 
   // Repeats go out after the first one has landed, and deliberately without
   // being awaited: this is often called while a booking is in flight, and
   // nothing here is allowed to slow that down or to throw into it.
   if (urgent) {
+    const mine = ++repeatGeneration;
     (async () => {
       for (let i = 1; i < URGENT_REPEATS; i++) {
         await new Promise((r) => setTimeout(r, REPEAT_GAP_MS));
+        // Stop if the space is gone, or if a newer alert has taken over.
+        if (stopRepeating || mine !== repeatGeneration) return;
         await send(asciiHeader(title)).catch(() => {});
       }
     })().catch(() => {});
@@ -96,7 +134,9 @@ async function pushNtfy(title, body, priority) {
     // the push still has to land.
     try {
       const res = await send('Ferry space open - check now');
-      return res.ok ? `ntfy ok (fallback title after: ${e.message.slice(0, 60)})` : `ntfy failed (${res.status})`;
+      return res.ok
+        ? `ntfy ok (fallback title after: ${e.message.slice(0, 60)})`
+        : `ntfy failed (${res.status})`;
     } catch (e2) {
       return `ntfy threw twice: ${e2.message.slice(0, 80)}`;
     }

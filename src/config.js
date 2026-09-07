@@ -129,6 +129,12 @@ export const limits = {
   // Polling three times as often through those hours was unaffordable while
   // Actions minutes were metered. On a public repository it is free, so the
   // effort goes where the odds are.
+  // How long to wait before alerting again about a sailing that is STILL open.
+  // The 7 September miss happened partly because one alert was the whole
+  // alarm: the run announced the space and then exited. A live chance deserves
+  // a fresh alarm every minute for as long as it lasts.
+  realertGapMs: 60_000,
+
   hotPollMs: 15_000,
   hotWindows: [
     // The day before Sunday travel, through its 5 p.m. deadline and after.

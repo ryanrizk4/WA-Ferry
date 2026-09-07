@@ -18,7 +18,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { trip, releases, limits, stopAfter } from './config.js';
 import { nowPT, msUntil, humanDuration } from './lib/time.js';
 import { alreadyBooked } from './lib/state.js';
-import { notify } from './lib/notify.js';
+import { notify, callOffRepeats, resumeRepeats } from './lib/notify.js';
 
 const MODE = process.env.MODE === 'snipe' ? 'snipe' : 'watch';
 const DRY_RUN = process.env.DRY_RUN === 'true';
@@ -295,6 +295,9 @@ async function main() {
   let attempts = 0;
   let pass = 0;
   let consecutiveFailures = 0;
+  // Which sailing the phone is currently being alarmed about, and when.
+  let alertedKey = null;
+  let lastAlertMs = 0;
   try {
     do {
       pass += 1;
@@ -324,10 +327,40 @@ async function main() {
         }
       }
 
+      if (!found?.length) {
+        // The space is gone. Call off any repeats still queued so the phone
+        // stops buzzing about a chance that has passed, and let the next find
+        // start a fresh alarm.
+        if (alertedKey) {
+          log(`the space alerted about is gone; calling off the repeats`);
+          callOffRepeats();
+          alertedKey = null;
+        }
+      }
+
       if (found?.length) {
         // findAvailability returns matches already ordered by our preference,
         // so the first one is the best sailing actually on offer.
         const pick = found[0];
+
+        // Alert again if this is a different sailing, or if the same one is
+        // still sitting there a minute later and still unbooked. One alert per
+        // opportunity was not enough; one per minute for as long as the
+        // opportunity lasts is what this needs to be.
+        const key = `${pick.date} ${pick.depart}`;
+        const now = Date.now();
+        const fresh = key !== alertedKey;
+        const stale = now - lastAlertMs > limits.realertGapMs;
+        if (!fresh && !stale) {
+          log(`pass ${pass}: ${key} still open, alerted `
+            + `${humanDuration(now - lastAlertMs)} ago; not repeating yet`);
+          if (Date.now() >= deadline) break;
+          await sleep(MODE === 'watch' ? watchPollMs() : limits.sprintPollMs);
+          continue;
+        }
+        if (fresh) resumeRepeats();
+        alertedKey = key;
+        lastAlertMs = now;
         log(`pass ${pass}: SPACE FOUND — ${pick.date} ${pick.depart} (${pick.label}), ${pick.spacesText}`);
 
         // Alert first, before anything else. WSF enforces a reCAPTCHA on the
@@ -346,6 +379,9 @@ async function main() {
             + `Pick ${pick.depart}, tick the "I'm not a robot" box, then Add to Cart and check out.\n\n`
             + `WSF requires that captcha, so this part cannot be automated.`,
           priority: 'high',
+          // Re-alerts go to the phone but not to the issue tracker: one issue
+          // per opportunity is a record, one a minute is a mess.
+          issue: fresh,
         });
 
         if (DRY_RUN) {
@@ -372,12 +408,18 @@ async function main() {
           });
           return;
         }
-        // The expected outcome: WSF's captcha refused it. The alert is already
-        // sent, so there is nothing useful left to say and no point retrying —
-        // a second attempt fails identically and only burns the window.
+        // The expected outcome: WSF's captcha refused it. Retrying the booking
+        // is pointless, a second attempt fails identically.
+        //
+        // But this used to end the whole run, and that was wrong. On
+        // 7 September the watcher found the 8:50 a.m. Monday sailing, alerted,
+        // exited, and the person saw the alert too late. Standing down at the
+        // exact moment the space exists is backwards: the chance is live until
+        // somebody books it, and every second of it deserves another push.
+        // So keep watching, and keep alerting while it is still there.
         if (result.handoff) {
-          log(`pass ${pass}: captcha refused it, as expected — ${result.reason}`);
-          return;
+          log(`pass ${pass}: captcha refused it, as expected — ${result.reason}; `
+            + `staying on it in case the space holds`);
         }
 
         // Anything else is a surprise worth a second look, but the human has
