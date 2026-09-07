@@ -111,6 +111,34 @@ jobs:
             echo "past the travel window; not handing off"
             exit 0
           fi
+          # Only chain on a public repository.
+          #
+          # Chaining makes the watch continuous, which is the point, but
+          # continuous means billing roughly 1,400 Actions minutes a day. On a
+          # private repository the free allowance is 2,000 a month: the chain
+          # would eat it in under two days and then everything stops, including
+          # the release snipers, which are the runs that cannot be missed.
+          # Public repositories are unmetered, so there it is free.
+          #
+          # This is checked here rather than trusted from the application code,
+          # so that a crash in that code cannot leave the chain running against
+          # a metered account.
+          vis=$(curl -sS -H "authorization: Bearer $GH_TOKEN" \
+                     -H "accept: application/vnd.github+json" \
+                     "https://api.github.com/repos/${{ github.repository }}" \
+                | grep -o '"visibility"[^,]*' | head -1)
+          echo "repository $vis"
+          case "$vis" in
+            *public*) ;;
+            *)
+              echo "private repository: not chaining, because continuous running"
+              echo "would exhaust the free Actions minutes in under two days."
+              echo "The schedule still runs. Make the repository public for"
+              echo "continuous cover."
+              exit 0
+              ;;
+          esac
+
           echo "handing off to the next watch run"
           code=$(curl -sS -o /tmp/dispatch.out -w '%{http_code}' -X POST \
             -H "authorization: Bearer $GH_TOKEN" \
