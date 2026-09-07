@@ -1,55 +1,51 @@
-// Can the booking page be deep-linked?
+// When exactly does the cancellation window close?
 //
-// At a release the human's clock starts when the alert lands and stops when
-// the captcha is ticked. Most of that is setup: open the site, choose the
-// route, type the date, pick the vehicle, then find the sailing. If the page
-// accepts any of that as a URL, the alert can carry a link that lands straight
-// on the sailing list and cuts the slow part out.
+// WSF charges a no-show fee "if you do not use your reservation or if you
+// cancel after the allowed cancellation window". That window has a deadline,
+// and deadlines create spikes: people who are not going to travel cancel just
+// before it, to dodge the fee. If we know when it falls, we know the single
+// best minute in the week to be watching, and it is not 7 a.m.
 //
-// Read-only. Selects nothing, holds nothing.
+// Read-only. Fetches published pages and prints the relevant wording.
 
 import { chromium } from 'playwright';
-import { mkdirSync } from 'node:fs';
 
-const BASE = 'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx';
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
-  + '(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-
-// Shapes worth trying, based on the control names the form actually posts.
-const CANDIDATES = [
-  `${BASE}?from=15&to=1&date=9/14/26`,
-  `${BASE}?departingterm=15&arrivingterm=1&tripdate=9/14/26`,
-  `${BASE}?FromTerm=15&ToTerm=1&Date=9/14/26`,
-  `${BASE}?dlFromTermList=15&dlToTermList=1&txtDatePicker=9/14/26`,
-  `${BASE}?ctl00$MainContent$dlFromTermList=15&ctl00$MainContent$dlToTermList=1`,
+const PAGES = [
+  'https://wsdot.wa.gov/travel/washington-state-ferries/vehicle-reservations',
+  'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/Default.aspx',
+  'https://wsdot.wa.gov/ferries/tickets/refunds',
+  'https://secureapps.wsdot.wa.gov/Ferries/Reservations/vehicle/shared/Save_a_Spot_FAQs.pdf',
 ];
 
-mkdirSync('out', { recursive: true });
-const log = (...a) => console.log(...a);
+// Sentences that could carry the deadline.
+const PATTERN = /(cancel|no.?show|change your reservation|refund)/i;
+const DEADLINE = /(\d{1,2}\s*(a\.?m\.?|p\.?m\.?)|\d+\s*(hours?|days?|minutes?)|day before|night before|prior to)/i;
+
+const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
+  + '(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
 
 const browser = await chromium.launch();
 const page = await browser.newContext({ userAgent: UA }).then((c) => c.newPage());
 
 try {
-  for (const url of CANDIDATES) {
+  for (const url of PAGES) {
+    console.log(`\n${'='.repeat(70)}\n${url}\n${'='.repeat(70)}`);
     try {
-      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-      await page.waitForTimeout(2500);
-      const state = await page.evaluate(() => {
-        const v = (sel) => document.querySelector(sel)?.value ?? '(absent)';
-        return {
-          from: v('#MainContent_dlFromTermList'),
-          to: v('#MainContent_dlToTermList'),
-          date: v('#MainContent_txtDatePicker'),
-          vehicle: v('#MainContent_dlVehicle'),
-          gridPresent: Boolean(document.querySelector('#MainContent_gvschedule')),
-        };
-      });
-      const prefilled = state.from === '15' || state.to === '1' || state.date !== '';
-      log(`${prefilled ? 'PREFILLED' : 'ignored  '}  ${url.replace(BASE, '...')}`);
-      log(`            from=${state.from} to=${state.to} date="${state.date}" grid=${state.gridPresent}`);
+      const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      if (!resp?.ok()) { console.log(`  http ${resp?.status()}`); continue; }
+      await page.waitForTimeout(1500);
+
+      const text = await page.evaluate(() => document.body?.innerText || '');
+      const sentences = text.split(/(?<=[.!?])\s+|\n+/).map((x) => x.replace(/\s+/g, ' ').trim());
+
+      const hits = sentences.filter((x) => x.length > 25 && PATTERN.test(x));
+      if (!hits.length) { console.log('  nothing about cancelling on this page'); continue; }
+
+      for (const h of hits.slice(0, 25)) {
+        console.log(`  ${DEADLINE.test(h) ? '>> ' : '   '}${h.slice(0, 300)}`);
+      }
     } catch (e) {
-      log(`error     ${url.replace(BASE, '...')} -> ${e.message.split('\n')[0]}`);
+      console.log(`  failed: ${e.message.split('\n')[0]}`);
     }
   }
 } finally {
