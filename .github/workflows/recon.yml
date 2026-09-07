@@ -1,6 +1,8 @@
 name: Recon WSF reservation site
 
 on:
+  push:
+    branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
   workflow_dispatch:
     inputs:
       entry_url:
