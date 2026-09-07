@@ -1,56 +1,84 @@
-// Get the exact wording around the cancellation advice.
+// Does the reservation flow work on a phone?
 //
-// The FAQ does say to check "the day before your preferred reservation, which
-// is when people can cancel without a no-show fee". The clock time sits in the
-// first half of that sentence, which sentence-splitting cut off. So stop
-// splitting and print the raw neighbourhood of the phrase.
+// The plan just changed: no laptops on the trip, so the booking will be done
+// on a phone in a hurry. Everything verified so far was on a desktop viewport.
+// The site has a "Mobile Site" link in its markup, which means there may be a
+// second, different flow, and finding that out at 5 p.m. on Sunday would be
+// too late.
+//
+// Read-only: searches and reports, selects nothing.
 
-import { chromium } from 'playwright';
+import { chromium, devices } from 'playwright';
+import { trip } from './config.js';
+import * as flow from './lib/flow.js';
+import { prepareSearch, searchDate } from './lib/search.js';
 
-const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
-  + '(KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36';
-
-const ANCHORS = [
-  'day before your preferred reservation',
-  'without a no-show fee',
-  'Check back frequently',
-  'cancellation',
-];
+const phone = devices['iPhone 14 Pro'];
 
 const browser = await chromium.launch();
-const page = await browser.newContext({ userAgent: UA }).then((c) => c.newPage());
+const ctx = await browser.newContext({ ...phone });
+const page = await ctx.newPage();
+
+const log = (...a) => console.log(...a);
+const rule = (t) => log(`\n${'='.repeat(68)}\n${t}\n${'='.repeat(68)}`);
 
 try {
-  await page.goto('https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/Default.aspx',
-    { waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForTimeout(1500);
+  rule(`PHONE VIEWPORT: ${phone.viewport.width}x${phone.viewport.height}, touch=${phone.hasTouch}`);
 
-  const q = page.getByText(/How do I change or cancel a vehicle reservation/i).first();
-  if (await q.count()) {
-    await q.click({ timeout: 8000 }).catch(() => {});
-    await page.waitForTimeout(2500);
+  rule('1. Can the search form be driven at all on a phone?');
+  await prepareSearch(page, trip);
+  log('  route and vehicle set OK');
+
+  const res = await searchDate(page, trip.targets[0].date, trip);
+  log(`  search ran: ${res.ok ? `${res.rows.length} sailings parsed` : res.reason}`);
+  if (res.ok) {
+    for (const r of res.rows) log(`    ${r.bookable ? 'OPEN' : 'full'}  ${r.depart}  ${r.spacesText}`);
   }
-  // Nothing else gets clicked. The previous version opened everything whose
-  // text contained a question mark, which navigated off the page entirely and
-  // made the answer vanish from a run that had already found it once.
-  console.log(`reading: ${page.url()}`);
 
-  const text = (await page.evaluate(() => document.body.innerText)).replace(/\s+/g, ' ');
+  rule('2. Is anything important off-screen or unreachable by touch?');
+  const layout = await page.evaluate(() => {
+    const out = {};
+    const check = (name, sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return void (out[name] = 'ABSENT');
+      const r = el.getBoundingClientRect();
+      out[name] = {
+        visible: r.width > 0 && r.height > 0,
+        offRight: Math.round(r.right - document.documentElement.clientWidth),
+        size: `${Math.round(r.width)}x${Math.round(r.height)}`,
+      };
+    };
+    check('grid', '#MainContent_gvschedule');
+    check('firstRadio', '#MainContent_gvschedule_rdoTypeSelect_0');
+    check('refresh', '#MainContent_linkBtnRefresh');
+    check('datebox', '#MainContent_txtDatePicker');
+    out.pageWiderThanScreen =
+      document.documentElement.scrollWidth > document.documentElement.clientWidth;
+    out.scrollWidth = document.documentElement.scrollWidth;
+    out.clientWidth = document.documentElement.clientWidth;
+    return out;
+  });
+  log(JSON.stringify(layout, null, 2));
 
-  for (const anchor of ANCHORS) {
-    console.log(`\n${'='.repeat(70)}\nANCHOR: "${anchor}"\n${'='.repeat(70)}`);
-    let from = 0;
-    let found = 0;
-    for (;;) {
-      const i = text.indexOf(anchor, from);
-      if (i === -1) break;
-      found += 1;
-      console.log(`\n  ...${text.slice(Math.max(0, i - 400), i + 300)}...`);
-      from = i + anchor.length;
-      if (found >= 3) break;
-    }
-    if (!found) console.log('  not present');
-  }
+  rule('3. Does the site push phones to a separate mobile version?');
+  const mobile = await page.evaluate(() => {
+    const l = document.querySelector('#mobileLink');
+    return l ? { present: true, text: l.innerText.trim(), href: l.getAttribute('href') } : { present: false };
+  });
+  log(JSON.stringify(mobile));
+
+  rule('4. Radio buttons: are they big enough to hit with a thumb?');
+  const touch = await page.evaluate(() => {
+    const rs = [...document.querySelectorAll('#MainContent_gvschedule input[type=radio]')];
+    return rs.slice(0, 3).map((r) => {
+      const b = r.getBoundingClientRect();
+      return { id: r.id, w: Math.round(b.width), h: Math.round(b.height), disabled: r.disabled };
+    });
+  });
+  log(JSON.stringify(touch, null, 2));
+  log('\n(Apple and Google both say a touch target wants about 44 points.)');
+} catch (e) {
+  log(`FAILED: ${e.message.split('\n')[0]}`);
 } finally {
   await browser.close();
 }
