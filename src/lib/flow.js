@@ -23,8 +23,12 @@ export const VALUES = {
   heightUpTo72: '1000',
 };
 
+// default.aspx is a marketing/login home page; the search form lives one click
+// deeper. Going straight there saves a postback, which matters when the whole
+// point is to be early.
 export const START_URL =
-  'https://secureapps.wsdot.wa.gov/Ferries/Reservations/Vehicle/default.aspx';
+  'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx';
+const HOME_MAKE_RESERVATION = '#linkBtnContinue';
 
 // WebForms answers a partial postback before the DOM settles, so waiting on
 // the response alone is not enough; give the UpdatePanel a beat to swap in.
@@ -36,6 +40,18 @@ async function settle(page, ms = 1200) {
 export async function openSearch(page) {
   await page.goto(START_URL, { waitUntil: 'networkidle', timeout: 60000 });
   await settle(page, 500);
+
+  // A cookie check or session timeout can bounce us back to the home page.
+  // If that happens, click through rather than failing the run.
+  const haveForm = await page.locator(F.fromTerm).count();
+  if (!haveForm) {
+    const home = await page.locator(HOME_MAKE_RESERVATION).count();
+    if (home) {
+      await page.click(HOME_MAKE_RESERVATION);
+      await settle(page, 1500);
+    }
+  }
+  await page.waitForSelector(F.fromTerm, { timeout: 20000 });
   return page.url();
 }
 
@@ -59,7 +75,8 @@ export async function setRoute(page, fromValue, toValue) {
 // fill() can fail. Setting the value directly and firing the events WebForms
 // listens for works whether or not the widget cooperates.
 export async function setDate(page, mmddyyyy) {
-  const ok = await page.fill(F.date, mmddyyyy).then(() => true).catch(() => false);
+  const ok = await page.fill(F.date, mmddyyyy, { timeout: 5000 })
+    .then(() => true).catch(() => false);
   if (!ok) {
     await page.evaluate((v) => {
       const el = document.querySelector('#MainContent_txtDatePicker');

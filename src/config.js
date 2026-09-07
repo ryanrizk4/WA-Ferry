@@ -34,11 +34,16 @@ export const trip = {
   ],
 };
 
-// When WSF drops new inventory. Space for the Anacortes/San Juan route is
-// released in waves rather than all at once: a block when the season's
-// schedule opens, another two weeks before each sailing, another two days
-// before. The two-week wave for these dates has already passed, so the two-day
-// wave is the one worth racing.
+// When WSF drops new inventory. Their published rule for the Anacortes/San
+// Juan Islands route, in three phases:
+//
+//   two months before the season starts, 10 a.m. PT — 30% of standard spaces
+//   two weeks before each sailing date, 7 a.m. PT   — another 30%
+//   two days before each sailing date, 7 a.m. PT    — the last 30%
+//
+// The final 10% is held back for emergency and stand-by. The two-week wave for
+// these dates has already passed, so the two-day wave is the one worth racing.
+// A virtual waiting room guards the season-opening release only, not these.
 //
 // All times are America/Los_Angeles.
 export const releases = [
