@@ -75,6 +75,40 @@ try {
       ? 'ANSWER: captcha IS demanded even signed in — booking needs a human'
       : 'ANSWER: no captcha on this step — automatic booking should work');
 
+    // Rendered is not the same as enforced. Try the next step without
+    // touching the captcha and see whether the server actually refuses.
+    // Adding to a cart is not a reservation: it is a hold that expires, and
+    // nothing below goes anywhere near checkout or confirm.
+    rule('DOES THE CAPTCHA ACTUALLY BLOCK, OR IS IT JUST ON THE PAGE?');
+    const before = page.url();
+    const cartBtn = page.getByText(/add to cart/i).first();
+    if (await cartBtn.count()) {
+      await cartBtn.click({ timeout: 10000 }).catch((e) => log(`  click failed: ${e.message.split('\n')[0]}`));
+      await page.waitForTimeout(4000);
+
+      const verdict = await page.evaluate(() => {
+        const err = document.querySelector('#CaptchaErrorMessage');
+        const errShown = err && getComputedStyle(err).display !== 'none' && err.innerText.trim();
+        const cart = document.querySelector('#reservation_cart_status')?.innerText || '';
+        return {
+          captchaError: errShown ? err.innerText.trim() : null,
+          cartSays: cart.replace(/\s+/g, ' ').trim().slice(0, 120),
+          bodyMentionsCaptcha: /captcha|not a robot|verify you/i.test(document.body.innerText),
+        };
+      });
+      log(`  url before: ${before}`);
+      log(`  url after:  ${page.url()}`);
+      log(`  ${JSON.stringify(verdict, null, 2)}`);
+      rule(verdict.captchaError
+        ? `ENFORCED: rejected with "${verdict.captchaError}"`
+        : (/no vehicle reservations selected/i.test(verdict.cartSays)
+          ? 'ENFORCED: nothing reached the cart'
+          : 'NOT ENFORCED at this step: the sailing reached the cart without solving anything'));
+      await page.screenshot({ path: 'out/diag-aftercart.png', fullPage: true }).catch(() => {});
+    } else {
+      log('  no Add to Cart control found');
+    }
+
     writeFileSync('out/diag-selected.html', await page.content());
     await page.screenshot({ path: 'out/diag-selected.png', fullPage: true }).catch(() => {});
 
