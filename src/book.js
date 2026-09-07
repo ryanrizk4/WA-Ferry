@@ -14,7 +14,7 @@
 // difference is how hard and how long it looks.
 
 import { chromium } from 'playwright';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { trip, releases, limits, stopAfter } from './config.js';
 import { nowPT, msUntil, humanDuration } from './lib/time.js';
 import { alreadyBooked } from './lib/state.js';
@@ -93,11 +93,34 @@ async function withRetry(fn, what, attempts = 2) {
   throw last;
 }
 
+// Telling the workflow whether to start another run after this one.
+//
+// The watch is supposed to be continuous, and it cannot rely on GitHub's cron
+// to make that happen: over one fourteen-hour stretch the schedule produced
+// 36 runs where it promised about 120. So each run arranges its own successor
+// instead, and this file is the brake. Absent, the workflow starts another
+// run; present, it stops for good.
+//
+// The default is deliberately "keep going". A crash, a hung browser, a killed
+// process — none of them write this file, so none of them can quietly end the
+// watch. Only the two real endings do: the reservation is made, or the boat
+// has sailed.
+function standDown(why) {
+  try {
+    mkdirSync('out', { recursive: true });
+    writeFileSync('out/stop-watching', `${why}\n`);
+    log(`wrote out/stop-watching (${why}); no further runs will be started`);
+  } catch (e) {
+    log(`could not write the stop marker: ${e.message}`);
+  }
+}
+
 async function main() {
   log(`mode=${MODE} dryRun=${DRY_RUN} nowPT=${nowPT()}`);
 
   if (msUntil(stopAfter) < 0) {
     log(`travel window closed at ${stopAfter} PT; nothing left to do.`);
+    standDown('the travel window has closed');
     return;
   }
 
@@ -106,6 +129,7 @@ async function main() {
   const prior = await alreadyBooked();
   if (prior.booked) {
     log(`already booked — "${prior.title}" (${prior.url}). Standing down.`);
+    standDown(`already booked: ${prior.title}`);
     return;
   }
   if (!prior.known) log(`could not confirm whether we already booked: ${prior.reason}`);

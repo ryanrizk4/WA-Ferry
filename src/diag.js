@@ -1,146 +1,200 @@
-// Does the reservation flow work on a phone?
+// Mapping the mobile site.
 //
-// The plan changed: no laptops on the trip, so the booking happens on a phone
-// under time pressure. The first phone probe failed immediately — the
-// departing-terminal dropdown never appeared — but it failed by throwing, so
-// it did not say why. That distinction decides the whole plan:
+// The previous probe answered the question it was asked and raised a bigger
+// one. WSF does not serve phones a narrow version of the desktop site. It
+// serves a different site: the controls are named MobileMainContent_* instead
+// of MainContent_*, the vehicle-height dropdown is a different control
+// altogether, and the page fits a phone screen properly instead of needing to
+// be pinched.
 //
-//   - if the SCREEN SIZE is the problem, the page is there but awkward, and
-//     we practise the taps;
-//   - if the USER AGENT is the problem, WSF is serving phones something else,
-//     and "Request Desktop Website" is the workaround to rehearse;
-//   - if neither works, the phone cannot do this at all and we need another
-//     answer entirely.
+// So there are two possible routes for a person holding a phone at 5 p.m. on
+// Sunday with seconds to act:
 //
-// So: three scenarios, each reporting rather than throwing.
+//   1. the mobile site they will land on by default, or
+//   2. "Full Site" / Safari's Request Desktop Website, which is the flow
+//      already verified end to end, but at 1040px in a 980px window with
+//      13-pixel radio buttons.
 //
-// Read-only. Searches and describes; selects nothing, books nothing.
+// Choosing between those requires knowing whether the mobile site actually
+// completes a search and offers selectable sailings. This maps it: every
+// control, by name, in the order a thumb would hit them.
+//
+// Read-only. It searches and describes. It selects no sailing and books
+// nothing.
 
 import { chromium, devices } from 'playwright';
 import { trip } from './config.js';
-import { prepareSearch, searchDate } from './lib/search.js';
+import { wsfDate } from './lib/search.js';
 
 const log = (...a) => console.log(...a);
 const rule = (t) => log(`\n${'='.repeat(70)}\n${t}\n${'='.repeat(70)}`);
+const j = (x) => JSON.stringify(x, null, 2);
 
-const iphone = devices['iPhone 14 Pro'];
-const DESKTOP_UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
-  '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
+const START =
+  'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx';
 
-const SCENARIOS = [
-  {
-    key: 'phone',
-    title: 'A. Real phone: iPhone screen AND iPhone Safari user agent',
-    why: 'what happens if the traveller just opens the site on their phone',
-    ctx: { ...iphone },
-  },
-  {
-    key: 'desktop-mode',
-    title: 'B. Phone screen, desktop user agent ("Request Desktop Website")',
-    why: 'the one-tap workaround in Safari, if the user agent is the problem',
-    ctx: { ...iphone, userAgent: DESKTOP_UA },
-  },
-  {
-    key: 'laptop',
-    title: 'C. Control: full desktop window',
-    why: 'proves the probe itself works and the site is up',
-    ctx: { userAgent: DESKTOP_UA, viewport: { width: 1440, height: 1200 } },
-  },
-];
+// The mobile site is WebForms too, so the same rule applies: wait on the
+// ASP.NET AJAX postback state, never on network idle. Analytics beacons on
+// these pages never go quiet.
+async function settle(page, ms = 400) {
+  await page.waitForTimeout(150);
+  await page.waitForFunction(() => {
+    const prm = window.Sys?.WebForms?.PageRequestManager;
+    return !prm || !prm.getInstance().get_isInAsyncPostBack();
+  }, null, { timeout: 20000 }).catch(() => {});
+  await page.waitForTimeout(ms);
+}
 
-// What is actually on the page right now, whatever it turned out to be.
-async function describe(page) {
+// Every control on the page, described the way a person would need it
+// described: what it is, whether a thumb can hit it, what it offers.
+async function controls(page) {
   return page.evaluate(() => {
-    const el = (sel) => document.querySelector(sel);
-    const box = (sel) => {
-      const e = el(sel);
-      if (!e) return 'ABSENT';
+    const vis = (e) => {
       const r = e.getBoundingClientRect();
       return {
         size: `${Math.round(r.width)}x${Math.round(r.height)}`,
-        offRightBy: Math.round(r.right - document.documentElement.clientWidth),
-        onScreen: r.width > 0 && r.height > 0,
+        top: Math.round(r.top + window.scrollY),
+        onScreenHorizontally:
+          r.left >= 0 && r.right <= document.documentElement.clientWidth,
       };
     };
-    return {
-      url: location.href,
-      title: document.title,
-      fromTerminalDropdown: box('#MainContent_dlFromTermList'),
-      dateBox: box('#MainContent_txtDatePicker'),
-      grid: box('#MainContent_gvschedule'),
-      selectsOnPage: [...document.querySelectorAll('select')].map((s) => s.id || s.name),
-      buttonsOnPage: [...document.querySelectorAll('a,button,input[type=submit]')]
-        .map((b) => (b.innerText || b.value || '').replace(/\s+/g, ' ').trim())
-        .filter(Boolean)
-        .slice(0, 25),
-      widerThanScreen:
-        document.documentElement.scrollWidth > document.documentElement.clientWidth,
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-      firstText: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 400),
-    };
-  }).catch((e) => ({ error: e.message }));
+    const out = { selects: [], inputs: [], links: [] };
+    for (const s of document.querySelectorAll('select')) {
+      out.selects.push({
+        id: s.id || s.name,
+        options: [...s.options].map((o) => `${o.value}=${o.text}`.trim()).slice(0, 12),
+        ...vis(s),
+      });
+    }
+    for (const i of document.querySelectorAll('input')) {
+      if (i.type === 'hidden') continue;
+      out.inputs.push({ id: i.id || i.name, type: i.type, value: i.value, ...vis(i) });
+    }
+    for (const a of document.querySelectorAll('a')) {
+      const t = (a.innerText || '').replace(/\s+/g, ' ').trim();
+      if (t) out.links.push({ text: t, id: a.id || undefined, ...vis(a) });
+    }
+    return out;
+  });
 }
 
 const browser = await chromium.launch();
+const ctx = await browser.newContext({ ...devices['iPhone 14 Pro'] });
+const page = await ctx.newPage();
 
-for (const s of SCENARIOS) {
-  rule(`${s.title}\n   (${s.why})`);
-  const ctx = await browser.newContext(s.ctx);
-  const page = await ctx.newPage();
-  const t0 = Date.now();
+try {
+  rule('1. What a phone actually lands on');
+  await page.goto(START, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await settle(page);
+  log(`  url:   ${page.url()}`);
+  log(`  title: ${await page.title()}`);
 
-  try {
-    await prepareSearch(page, trip);
-    log('  form driven OK: route and vehicle set');
-  } catch (e) {
-    log(`  COULD NOT DRIVE THE FORM: ${e.message.split('\n')[0]}`);
+  const before = await controls(page);
+  log('\n  -- dropdowns on the search page --');
+  log(j(before.selects));
+  log('\n  -- inputs and buttons --');
+  log(j(before.inputs));
+  log('\n  -- links (is there a way back to the full site?) --');
+  log(j(before.links.filter((l) => /full|desktop|site|home/i.test(l.text))));
+
+  rule('2. Can the search be driven with a thumb?');
+  // Work from what is actually on the page rather than from guessed ids: the
+  // mobile control names are only known from the previous probe, and guessing
+  // is how the desktop flow wasted a day on the wrong height dropdown.
+  const ids = before.selects.map((s) => s.id);
+  const pick = (re) => ids.find((i) => re.test(i));
+  const fromId = pick(/FromTerm/i);
+  const toId = pick(/ToTerm/i);
+  const vehId = pick(/Vehicle/i);
+  const hgtId = pick(/Height/i);
+  const dateId = (before.inputs.find((i) => /date/i.test(i.id || '')) || {}).id;
+  log(`  departing: ${fromId}\n  arriving:  ${toId}\n  vehicle:   ${vehId}`
+    + `\n  height:    ${hgtId}\n  date box:  ${dateId}`);
+
+  await page.selectOption(`#${fromId}`, String(trip.from.id));
+  await settle(page);
+  await page.waitForFunction(
+    ([id, v]) => {
+      const s = document.getElementById(id);
+      return s && [...s.options].some((o) => o.value === v);
+    },
+    [toId, String(trip.to.id)],
+    { timeout: 20000 },
+  );
+  await page.selectOption(`#${toId}`, String(trip.to.id));
+  await settle(page);
+  log('  route set OK');
+
+  const d = wsfDate(trip.targets[0].date);
+  await page.evaluate(([id, v]) => {
+    const el = document.getElementById(id);
+    el.removeAttribute('readonly');
+    el.value = v;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }, [dateId, d]);
+  await settle(page);
+  log(`  date set to ${d}`);
+
+  // Vehicle length, then whatever height control that reveals. On the desktop
+  // site choosing "under 22 feet" swaps in a different height dropdown, and
+  // the one visible beforehand is a decoy; check whether mobile does the same.
+  await page.selectOption(`#${vehId}`, '3');
+  await settle(page);
+  const afterVehicle = await controls(page);
+  log('\n  -- dropdowns AFTER choosing "vehicle under 22 feet" --');
+  log(j(afterVehicle.selects.map((s) => ({ id: s.id, size: s.size, options: s.options }))));
+
+  rule('3. Does it return a sailing list, and can a thumb hit the rows?');
+  const showBtn = afterVehicle.inputs.find((i) => /show/i.test(i.value || ''))
+    || afterVehicle.links.find((l) => /show availability/i.test(l.text));
+  log(`  the "Show Availability" control: ${j(showBtn)}`);
+  if (showBtn?.id) {
+    await page.click(`#${showBtn.id}`);
+  } else {
+    await page.getByText(/show availability/i).first().click();
   }
+  await settle(page, 1500);
+  await page.waitForTimeout(2000);
 
-  const state = await describe(page);
-  log(`  landed on: ${state.url}`);
-  log(`  page title: ${state.title}`);
-  log(`  departing-terminal dropdown: ${JSON.stringify(state.fromTerminalDropdown)}`);
-  log(`  date box: ${JSON.stringify(state.dateBox)}`);
-  log(`  selects present: ${JSON.stringify(state.selectsOnPage)}`);
-  log(`  page wider than screen: ${state.widerThanScreen} `
-    + `(${state.scrollWidth}px content in a ${state.clientWidth}px window)`);
-  log(`  buttons: ${JSON.stringify(state.buttonsOnPage)}`);
-  log(`  text begins: ${state.firstText}`);
+  log(`  url after searching: ${page.url()}`);
+  const results = await page.evaluate(() => {
+    const tables = [...document.querySelectorAll('table')].map((t) => ({
+      id: t.id || '(no id)',
+      rows: t.rows.length,
+    }));
+    const radios = [...document.querySelectorAll('input[type=radio]')].map((r) => {
+      const b = r.getBoundingClientRect();
+      return {
+        id: r.id,
+        disabled: r.disabled,
+        size: `${Math.round(b.width)}x${Math.round(b.height)}`,
+        onScreenHorizontally:
+          b.left >= 0 && b.right <= document.documentElement.clientWidth,
+      };
+    });
+    return {
+      tables,
+      radios,
+      widerThanScreen:
+        document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      text: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 900),
+    };
+  });
+  log(`  tables: ${j(results.tables)}`);
+  log(`  radios (44px is the thumb-friendly minimum): ${j(results.radios)}`);
+  log(`  page wider than the screen: ${results.widerThanScreen}`);
+  log(`\n  page text:\n  ${results.text}`);
 
-  // Only worth searching if the form was reachable at all.
-  if (state.fromTerminalDropdown !== 'ABSENT') {
-    try {
-      const res = await searchDate(page, trip.targets[0].date, trip);
-      log(`  search ran: ${res.ok ? `${res.rows.length} sailings parsed` : res.reason}`);
-      if (res.ok) {
-        for (const r of res.rows) {
-          log(`    ${r.bookable ? 'OPEN' : 'full'}  ${r.depart}  ${r.spacesText}`);
-        }
-        const touch = await page.evaluate(() => {
-          const rs = [...document.querySelectorAll('#MainContent_gvschedule input[type=radio]')];
-          return rs.slice(0, 3).map((r) => {
-            const b = r.getBoundingClientRect();
-            return {
-              id: r.id,
-              size: `${Math.round(b.width)}x${Math.round(b.height)}`,
-              onScreenHorizontally:
-                b.right <= document.documentElement.clientWidth && b.left >= 0,
-              disabled: r.disabled,
-            };
-          });
-        });
-        log(`  radio buttons (44px is the thumb-friendly minimum): ${JSON.stringify(touch)}`);
-      }
-    } catch (e) {
-      log(`  SEARCH FAILED: ${e.message.split('\n')[0]}`);
-    }
-  }
-
-  await page.screenshot({ path: `out/${s.key}.png`, fullPage: true }).catch(() => {});
-  log(`  (${Math.round((Date.now() - t0) / 1000)}s, screenshot saved as ${s.key}.png)`);
-  await ctx.close();
+  await page.screenshot({ path: 'out/mobile-results.png', fullPage: true }).catch(() => {});
+} catch (e) {
+  log(`\nSTOPPED: ${e.message.split('\n')[0]}`);
+  log(`  url at the time: ${page.url()}`);
+  await page.screenshot({ path: 'out/mobile-failure.png', fullPage: true }).catch(() => {});
+  const text = await page.evaluate(
+    () => document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 900),
+  ).catch(() => '(could not read)');
+  log(`  page said: ${text}`);
+} finally {
+  await browser.close();
 }
-
-await browser.close();

@@ -44,6 +44,9 @@ jobs:
       # has to be restated or checkout cannot clone this private repo.
       contents: read
       issues: write
+      # Needed only for the hand-off step at the end: a run starts its
+      # successor by dispatching this same workflow.
+      actions: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -73,3 +76,44 @@ jobs:
           name: watch-failure-${{ github.run_number }}
           path: out/
           retention-days: 7
+
+      # Hand off to the next run.
+      #
+      # GitHub's cron is the weak link in this whole system. Over one
+      # fourteen-hour stretch an every-fifteen-minutes schedule produced 36
+      # runs where it promised about 120, and the gaps are exactly when a
+      # returned cancellation goes to somebody else. So the watch does not
+      # depend on the schedule to continue: each run asks for the next one
+      # itself, and the cron becomes a safety net rather than the mechanism.
+      #
+      # if: always() is the point. A crashed run, a hung browser, a job killed
+      # at the timeout — all of them still hand off. The only thing that stops
+      # the chain is the code deliberately writing out/stop-watching, which it
+      # does when the reservation is made or the travel window has closed.
+      #
+      # A workflow_dispatch made with GITHUB_TOKEN does start a new run;
+      # ordinary pushes made with that token do not, which is why this is a
+      # dispatch and not a commit to a trigger file.
+      - name: Start the next watch run
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [ -f out/stop-watching ]; then
+            echo "standing down: $(cat out/stop-watching)"
+            exit 0
+          fi
+          # Hard stop on the calendar as well as on the marker file. If the
+          # code somehow crashed before it could write the marker, this is
+          # what stops the chain running forever after the trip is over.
+          if [ "$(date -u +%Y%m%d)" -gt 20260915 ]; then
+            echo "past the travel window; not handing off"
+            exit 0
+          fi
+          echo "handing off to the next watch run"
+          curl -sS -X POST \
+            -H "authorization: Bearer $GH_TOKEN" \
+            -H "accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/watch.yml/dispatches" \
+            -d '{"ref":"${{ github.ref_name }}"}' \
+            -w 'dispatch HTTP %{http_code}\n'
