@@ -1,0 +1,11 @@
+Touching this file starts a snipe run.
+
+GitHub's scheduler has not fired a single run of the 15-minute watch since it
+was armed, while push-triggered runs work every time. Since the whole project
+comes down to two moments that do not repeat, this exists so those moments do
+not depend on a scheduler that has yet to prove itself.
+
+The snipe script waits out the remaining time itself, so firing it any time in
+the half hour before a release works.
+
+fired: never

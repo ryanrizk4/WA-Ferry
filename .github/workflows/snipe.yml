@@ -18,6 +18,11 @@ on:
     # has passed exits on its own without booking anything.
     - cron: '25 13 11,12 9 *'   # 06:25 PT
     - cron: '35 13 11,12 9 *'   # 06:35 PT
+  # Independent of GitHub's scheduler. Touching this file starts a snipe run,
+  # which gives a second, unrelated way to fire at 7 a.m. if cron does not.
+  push:
+    branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
+    paths: ['.snipe-trigger']
   workflow_dispatch:
     inputs:
       dry_run:
