@@ -124,6 +124,21 @@ async function main() {
     deadline = Date.now() + sprintWindowMs();
   }
 
+  // In watch mode, keep looking for a stretch rather than glancing once.
+  // Without this the loop breaks on its first pass, which is exactly what it
+  // did for a full night: every run was a single check covering a few seconds
+  // out of the hour, and the watchWindows config was never read at all.
+  if (MODE === 'watch') {
+    const soonest = Math.min(...trip.targets.map((t) => msUntil(`${t.date}T00:00:00`)));
+    const hours = soonest / 3_600_000;
+    const w = limits.watchWindows.find((x) => hours <= x.withinHours);
+    const runFor = w?.runForMs ?? 0;
+    deadline = Date.now() + runFor;
+    log(`${hours.toFixed(1)}h until the first travel date, so watching for `
+      + `${humanDuration(runFor)} this run, checking every `
+      + `${humanDuration(limits.idlePollMs)}`);
+  }
+
   browser = await chromium.launch();
   const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1440, height: 1200 } });
   const page = await ctx.newPage();
