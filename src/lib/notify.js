@@ -108,7 +108,7 @@ async function pushNtfy(title, body, priority) {
   // be worse than useless: the phone is engaged while it rings, which is
   // exactly when somebody is trying to use it to book.
   if (urgent && CALL_NUMBER) {
-    send(asciiHeader(title), { call: CALL_NUMBER }).catch(() => {});
+    send(asciiHeader(title), { 'x-call': CALL_NUMBER }).catch(() => {});
   }
 
   // Repeats go out after the first one has landed, and deliberately without

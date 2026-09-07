@@ -67,6 +67,7 @@ jobs:
           WSF_EMAIL: ${{ secrets.WSF_EMAIL }}
           WSF_PASSWORD: ${{ secrets.WSF_PASSWORD }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_CALL_NUMBER: ${{ secrets.NTFY_CALL_NUMBER }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npm run book
 
@@ -99,6 +100,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_CALL_NUMBER: ${{ secrets.NTFY_CALL_NUMBER }}
         run: |
           if [ -f out/stop-watching ]; then
             echo "standing down: $(cat out/stop-watching)"

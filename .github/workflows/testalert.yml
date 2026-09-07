@@ -11,7 +11,7 @@ on:
 jobs:
   testalert:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     permissions:
       contents: read
     steps:
@@ -22,4 +22,5 @@ jobs:
       - name: Send it
         env:
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_CALL_NUMBER: ${{ secrets.NTFY_CALL_NUMBER }}
         run: node src/testalert.js

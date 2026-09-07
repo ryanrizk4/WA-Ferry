@@ -1,20 +1,45 @@
-// Sends one notification, so the alert path is proven before it matters.
+// Proves the alert path works, including the phone call, before it matters.
 //
 // The whole value of this project is a push landing on a phone within seconds
-// of space appearing at 7 a.m. A topic name typed slightly wrong, or a phone
-// that never subscribed, fails silently and looks exactly like "no space came
-// up". Better to find that out now than on Friday.
+// of space appearing. A topic typed slightly wrong, a phone that never
+// subscribed, or a call number that was never verified all fail silently and
+// look exactly like "no space came up".
+//
+// This is a test, so it deliberately does NOT run the full six-minute alarm a
+// real alert runs. It sends the push, places the call if one is configured,
+// lets a couple of repeats through so their timing can be felt, and then
+// calls the rest off.
 
-import { notify } from './lib/notify.js';
+import { notify, callOffRepeats } from './lib/notify.js';
+
+const callConfigured = Boolean(process.env.NTFY_CALL_NUMBER);
+
+console.log(`phone call configured: ${callConfigured}`);
+if (!callConfigured) {
+  console.log('  NTFY_CALL_NUMBER is not set, so no call will be placed.');
+  console.log('  Add it as a repository secret to enable calls. It needs a paid');
+  console.log('  ntfy plan with a call allowance and a number verified in ntfy.');
+}
 
 await notify({
-  title: 'WA-Ferry test 2 - confirming the push actually lands',
-  body: 'If this reached your phone, the alerting path works and you are set.\n\n'
-    + 'The real one will name the sailing and date, and link straight to the '
-    + 'booking page. It fires the moment space appears, which in practice means '
-    + '7:00 a.m. Pacific on Fri Sept 11 (for Sunday the 13th) and Sat Sept 12 '
-    + '(for Monday the 14th), or any time a cancellation shows up.\n\n'
-    + 'Nothing is booked. This is only a test.',
+  title: 'WA-Ferry test - alert path check',
+  body: 'If this reached your phone, the alerting path works.\n\n'
+    + (callConfigured
+      ? 'Your phone should also RING, once, like a normal call. That is the '
+        + 'escalation for the real thing: a call is much harder to sleep '
+        + 'through than a notification.\n\n'
+      : 'No phone call was placed, because no call number is configured.\n\n')
+    + 'You should get two or three more buzzes about fifteen seconds apart, '
+    + 'then it stops. A real alert keeps that up for six minutes, or until the '
+    + 'space is gone.\n\n'
+    + 'The real one names the sailing and date and links straight to the '
+    + 'booking page. Nothing is booked. This is only a test.',
   priority: 'high',
   issue: false,
 });
+
+// Let a few repeats through so the cadence is familiar, then stop. Six minutes
+// of buzzing is right for a real chance and obnoxious for a test.
+await new Promise((r) => setTimeout(r, 40_000));
+callOffRepeats();
+console.log('test alarm called off after 40s (a real one runs for six minutes)');

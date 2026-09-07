@@ -30,4 +30,5 @@ jobs:
           WSF_EMAIL: ${{ secrets.WSF_EMAIL }}
           WSF_PASSWORD: ${{ secrets.WSF_PASSWORD }}
           NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          NTFY_CALL_NUMBER: ${{ secrets.NTFY_CALL_NUMBER }}
         run: node src/drill.js
