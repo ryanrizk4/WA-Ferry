@@ -1,0 +1,25 @@
+name: Send a test alert
+
+# Proves the phone push works before the moment it has to. Fires when the
+# test script changes, and on request.
+on:
+  push:
+    branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
+    paths: ['src/testalert.js']
+  workflow_dispatch:
+
+jobs:
+  testalert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Send it
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: node src/testalert.js
