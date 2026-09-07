@@ -1,30 +1,44 @@
 name: Watch for cancellations
 
 # Between release waves, space reappears when other people cancel, and it does
-# not last: a sailing seen open on one check was gone six minutes later. Every
-# fifteen minutes is the compromise — tight enough to catch those, loose enough
-# to stay polite to a public agency's servers and to fit the Actions minutes
-# budget on a private repo (roughly 100 runs a day).
+# not last: a sailing seen open on one check was gone six minutes later. The
+# only reliable way to catch those is to be looking when they happen, so this
+# does not glance and exit. Each run holds open and polls for hours, and the
+# next run is already queued behind it, waiting to take over the moment it
+# ends. That is continuous cover, which is what this needs now that there is
+# no laptop on the trip to fall back on.
 on:
   schedule:
     - cron: '*/15 * * * *'
-  # Independent of GitHub's scheduler, which has not fired once here.
-  # Touching .watch-trigger runs a check.
+  # Independent of GitHub's scheduler, which has been unreliable here.
+  # Touching .watch-trigger starts a run.
   push:
     branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
     paths: ['src/**', '.github/workflows/watch.yml', '.watch-trigger']
   workflow_dispatch:
 
-# Separate from the snipe group: a watch tick must never queue behind a
-# 40-minute snipe run, and a superseded tick is worth nothing.
+# Separate from the snipe group: a watch run must never queue behind a snipe.
+#
+# cancel-in-progress is deliberately FALSE. It used to be true, which was right
+# when a run was a ten-second glance and a superseded one was worth nothing.
+# With long runs it would be fatal: the every-fifteen-minutes cron would kill
+# the watcher a quarter of an hour into every shift, and cover would be worse
+# than before. False instead makes the cron a relay. GitHub keeps at most one
+# run pending per group, so the queue never piles up: one watching, one waiting
+# to take over. timeout-minutes below caps a stuck run so the relay cannot
+# stall behind it.
 concurrency:
   group: wsf-watch
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   watch:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    # The job runs until the code decides it is done. On a public repo that is
+    # five and a half hours, just under the six-hour GitHub job limit, leaving
+    # room for setup and for the handover to the next run. This is a backstop
+    # against a hung browser, not the normal exit.
+    timeout-minutes: 350
     permissions:
       # Naming any permission replaces the whole default set, so contents:read
       # has to be restated or checkout cannot clone this private repo.

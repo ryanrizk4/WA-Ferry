@@ -1,84 +1,146 @@
 // Does the reservation flow work on a phone?
 //
-// The plan just changed: no laptops on the trip, so the booking will be done
-// on a phone in a hurry. Everything verified so far was on a desktop viewport.
-// The site has a "Mobile Site" link in its markup, which means there may be a
-// second, different flow, and finding that out at 5 p.m. on Sunday would be
-// too late.
+// The plan changed: no laptops on the trip, so the booking happens on a phone
+// under time pressure. The first phone probe failed immediately — the
+// departing-terminal dropdown never appeared — but it failed by throwing, so
+// it did not say why. That distinction decides the whole plan:
 //
-// Read-only: searches and reports, selects nothing.
+//   - if the SCREEN SIZE is the problem, the page is there but awkward, and
+//     we practise the taps;
+//   - if the USER AGENT is the problem, WSF is serving phones something else,
+//     and "Request Desktop Website" is the workaround to rehearse;
+//   - if neither works, the phone cannot do this at all and we need another
+//     answer entirely.
+//
+// So: three scenarios, each reporting rather than throwing.
+//
+// Read-only. Searches and describes; selects nothing, books nothing.
 
 import { chromium, devices } from 'playwright';
 import { trip } from './config.js';
-import * as flow from './lib/flow.js';
 import { prepareSearch, searchDate } from './lib/search.js';
 
-const phone = devices['iPhone 14 Pro'];
-
-const browser = await chromium.launch();
-const ctx = await browser.newContext({ ...phone });
-const page = await ctx.newPage();
-
 const log = (...a) => console.log(...a);
-const rule = (t) => log(`\n${'='.repeat(68)}\n${t}\n${'='.repeat(68)}`);
+const rule = (t) => log(`\n${'='.repeat(70)}\n${t}\n${'='.repeat(70)}`);
 
-try {
-  rule(`PHONE VIEWPORT: ${phone.viewport.width}x${phone.viewport.height}, touch=${phone.hasTouch}`);
+const iphone = devices['iPhone 14 Pro'];
+const DESKTOP_UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+  '(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36';
 
-  rule('1. Can the search form be driven at all on a phone?');
-  await prepareSearch(page, trip);
-  log('  route and vehicle set OK');
+const SCENARIOS = [
+  {
+    key: 'phone',
+    title: 'A. Real phone: iPhone screen AND iPhone Safari user agent',
+    why: 'what happens if the traveller just opens the site on their phone',
+    ctx: { ...iphone },
+  },
+  {
+    key: 'desktop-mode',
+    title: 'B. Phone screen, desktop user agent ("Request Desktop Website")',
+    why: 'the one-tap workaround in Safari, if the user agent is the problem',
+    ctx: { ...iphone, userAgent: DESKTOP_UA },
+  },
+  {
+    key: 'laptop',
+    title: 'C. Control: full desktop window',
+    why: 'proves the probe itself works and the site is up',
+    ctx: { userAgent: DESKTOP_UA, viewport: { width: 1440, height: 1200 } },
+  },
+];
 
-  const res = await searchDate(page, trip.targets[0].date, trip);
-  log(`  search ran: ${res.ok ? `${res.rows.length} sailings parsed` : res.reason}`);
-  if (res.ok) {
-    for (const r of res.rows) log(`    ${r.bookable ? 'OPEN' : 'full'}  ${r.depart}  ${r.spacesText}`);
-  }
-
-  rule('2. Is anything important off-screen or unreachable by touch?');
-  const layout = await page.evaluate(() => {
-    const out = {};
-    const check = (name, sel) => {
-      const el = document.querySelector(sel);
-      if (!el) return void (out[name] = 'ABSENT');
-      const r = el.getBoundingClientRect();
-      out[name] = {
-        visible: r.width > 0 && r.height > 0,
-        offRight: Math.round(r.right - document.documentElement.clientWidth),
+// What is actually on the page right now, whatever it turned out to be.
+async function describe(page) {
+  return page.evaluate(() => {
+    const el = (sel) => document.querySelector(sel);
+    const box = (sel) => {
+      const e = el(sel);
+      if (!e) return 'ABSENT';
+      const r = e.getBoundingClientRect();
+      return {
         size: `${Math.round(r.width)}x${Math.round(r.height)}`,
+        offRightBy: Math.round(r.right - document.documentElement.clientWidth),
+        onScreen: r.width > 0 && r.height > 0,
       };
     };
-    check('grid', '#MainContent_gvschedule');
-    check('firstRadio', '#MainContent_gvschedule_rdoTypeSelect_0');
-    check('refresh', '#MainContent_linkBtnRefresh');
-    check('datebox', '#MainContent_txtDatePicker');
-    out.pageWiderThanScreen =
-      document.documentElement.scrollWidth > document.documentElement.clientWidth;
-    out.scrollWidth = document.documentElement.scrollWidth;
-    out.clientWidth = document.documentElement.clientWidth;
-    return out;
-  });
-  log(JSON.stringify(layout, null, 2));
-
-  rule('3. Does the site push phones to a separate mobile version?');
-  const mobile = await page.evaluate(() => {
-    const l = document.querySelector('#mobileLink');
-    return l ? { present: true, text: l.innerText.trim(), href: l.getAttribute('href') } : { present: false };
-  });
-  log(JSON.stringify(mobile));
-
-  rule('4. Radio buttons: are they big enough to hit with a thumb?');
-  const touch = await page.evaluate(() => {
-    const rs = [...document.querySelectorAll('#MainContent_gvschedule input[type=radio]')];
-    return rs.slice(0, 3).map((r) => {
-      const b = r.getBoundingClientRect();
-      return { id: r.id, w: Math.round(b.width), h: Math.round(b.height), disabled: r.disabled };
-    });
-  });
-  log(JSON.stringify(touch, null, 2));
-  log('\n(Apple and Google both say a touch target wants about 44 points.)');
-} catch (e) {
-  log(`FAILED: ${e.message.split('\n')[0]}`);
-} finally {
-  await browser.close();
+    return {
+      url: location.href,
+      title: document.title,
+      fromTerminalDropdown: box('#MainContent_dlFromTermList'),
+      dateBox: box('#MainContent_txtDatePicker'),
+      grid: box('#MainContent_gvschedule'),
+      selectsOnPage: [...document.querySelectorAll('select')].map((s) => s.id || s.name),
+      buttonsOnPage: [...document.querySelectorAll('a,button,input[type=submit]')]
+        .map((b) => (b.innerText || b.value || '').replace(/\s+/g, ' ').trim())
+        .filter(Boolean)
+        .slice(0, 25),
+      widerThanScreen:
+        document.documentElement.scrollWidth > document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+      firstText: document.body.innerText.replace(/\s+/g, ' ').trim().slice(0, 400),
+    };
+  }).catch((e) => ({ error: e.message }));
 }
+
+const browser = await chromium.launch();
+
+for (const s of SCENARIOS) {
+  rule(`${s.title}\n   (${s.why})`);
+  const ctx = await browser.newContext(s.ctx);
+  const page = await ctx.newPage();
+  const t0 = Date.now();
+
+  try {
+    await prepareSearch(page, trip);
+    log('  form driven OK: route and vehicle set');
+  } catch (e) {
+    log(`  COULD NOT DRIVE THE FORM: ${e.message.split('\n')[0]}`);
+  }
+
+  const state = await describe(page);
+  log(`  landed on: ${state.url}`);
+  log(`  page title: ${state.title}`);
+  log(`  departing-terminal dropdown: ${JSON.stringify(state.fromTerminalDropdown)}`);
+  log(`  date box: ${JSON.stringify(state.dateBox)}`);
+  log(`  selects present: ${JSON.stringify(state.selectsOnPage)}`);
+  log(`  page wider than screen: ${state.widerThanScreen} `
+    + `(${state.scrollWidth}px content in a ${state.clientWidth}px window)`);
+  log(`  buttons: ${JSON.stringify(state.buttonsOnPage)}`);
+  log(`  text begins: ${state.firstText}`);
+
+  // Only worth searching if the form was reachable at all.
+  if (state.fromTerminalDropdown !== 'ABSENT') {
+    try {
+      const res = await searchDate(page, trip.targets[0].date, trip);
+      log(`  search ran: ${res.ok ? `${res.rows.length} sailings parsed` : res.reason}`);
+      if (res.ok) {
+        for (const r of res.rows) {
+          log(`    ${r.bookable ? 'OPEN' : 'full'}  ${r.depart}  ${r.spacesText}`);
+        }
+        const touch = await page.evaluate(() => {
+          const rs = [...document.querySelectorAll('#MainContent_gvschedule input[type=radio]')];
+          return rs.slice(0, 3).map((r) => {
+            const b = r.getBoundingClientRect();
+            return {
+              id: r.id,
+              size: `${Math.round(b.width)}x${Math.round(b.height)}`,
+              onScreenHorizontally:
+                b.right <= document.documentElement.clientWidth && b.left >= 0,
+              disabled: r.disabled,
+            };
+          });
+        });
+        log(`  radio buttons (44px is the thumb-friendly minimum): ${JSON.stringify(touch)}`);
+      }
+    } catch (e) {
+      log(`  SEARCH FAILED: ${e.message.split('\n')[0]}`);
+    }
+  }
+
+  await page.screenshot({ path: `out/${s.key}.png`, fullPage: true }).catch(() => {});
+  log(`  (${Math.round((Date.now() - t0) / 1000)}s, screenshot saved as ${s.key}.png)`);
+  await ctx.close();
+}
+
+await browser.close();

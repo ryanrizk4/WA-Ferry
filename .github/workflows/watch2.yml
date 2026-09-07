@@ -27,12 +27,12 @@ on:
 # 40-minute snipe run, and a superseded tick is worth nothing.
 concurrency:
   group: wsf-watch
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   watch2:
     runs-on: ubuntu-latest
-    timeout-minutes: 55
+    timeout-minutes: 350
     permissions:
       # Naming any permission replaces the whole default set, so contents:read
       # has to be restated or checkout cannot clone this private repo.

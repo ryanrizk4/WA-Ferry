@@ -52,6 +52,27 @@ function currentRelease() {
 
 // One retry, because the failure that matters happens two minutes before a
 // release and a transient hiccup there costs the whole run.
+// Unlimited Actions minutes are the whole reason continuous watching is
+// possible, and they only come with a public repository. Ask GitHub rather
+// than assume: running continuously on a private repo would burn a 2,000
+// minute allowance in under two days and then stop everything, snipers
+// included, exactly when it matters most.
+async function actionsAreFree() {
+  const token = process.env.GITHUB_TOKEN;
+  const repo = process.env.GITHUB_REPOSITORY;
+  if (!token || !repo) return false;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${repo}`, {
+      headers: { authorization: `Bearer ${token}`, accept: 'application/vnd.github+json' },
+    });
+    if (!r.ok) return false;
+    const j = await r.json();
+    return j.visibility === 'public' || j.private === false;
+  } catch {
+    return false;
+  }
+}
+
 // Held at module scope so the top-level handler can close it even when the
 // failure happens before the main loop's own cleanup is in scope. Playwright
 // keeps the event loop alive, so an unclosed browser turns a crash into a hang
@@ -129,14 +150,28 @@ async function main() {
   // did for a full night: every run was a single check covering a few seconds
   // out of the hour, and the watchWindows config was never read at all.
   if (MODE === 'watch') {
-    const soonest = Math.min(...trip.targets.map((t) => msUntil(`${t.date}T00:00:00`)));
-    const hours = soonest / 3_600_000;
-    const w = limits.watchWindows.find((x) => hours <= x.withinHours);
-    const runFor = w?.runForMs ?? 0;
+    const free = await actionsAreFree();
+    let runFor;
+    if (free) {
+      // Public repo: minutes are free, so hold the line for almost the whole
+      // six hour job limit and let the chain start the next one. That is
+      // continuous cover, which is what this needs now that there is no
+      // laptop to fall back on.
+      runFor = limits.continuousRunMs;
+      log(`repository is public, so Actions minutes are unmetered: watching `
+        + `continuously for ${humanDuration(runFor)}, checking every `
+        + `${humanDuration(limits.idlePollMs)}`);
+    } else {
+      const soonest = Math.min(...trip.targets.map((t) => msUntil(`${t.date}T00:00:00`)));
+      const hours = soonest / 3_600_000;
+      const w = limits.watchWindows.find((x) => hours <= x.withinHours);
+      runFor = w?.runForMs ?? 0;
+      log(`repository is PRIVATE, so minutes are capped. ${hours.toFixed(1)}h until `
+        + `the first travel date, so watching for ${humanDuration(runFor)} this run, `
+        + `checking every ${humanDuration(limits.idlePollMs)}`);
+      log('  make the repository public to get continuous watching instead');
+    }
     deadline = Date.now() + runFor;
-    log(`${hours.toFixed(1)}h until the first travel date, so watching for `
-      + `${humanDuration(runFor)} this run, checking every `
-      + `${humanDuration(limits.idlePollMs)}`);
   }
 
   browser = await chromium.launch();

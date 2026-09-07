@@ -130,6 +130,10 @@ export const limits = {
   // running continuously. That is affordable for a day and not for a week,
   // hence the steep taper. Roughly 1,900 Actions minutes across the week in
   // the worst case, against a 2,000 monthly allowance.
+  // How long one run watches when minutes are free. Just under GitHub's six
+  // hour job ceiling, so a chain of these is continuous cover.
+  continuousRunMs: 5.5 * 60 * 60_000,
+
   watchWindows: [
     { withinHours: 24, runForMs: 45 * 60_000 },   // the day-before days
     { withinHours: 48, runForMs: 15 * 60_000 },

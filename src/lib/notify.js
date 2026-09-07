@@ -41,20 +41,52 @@ function asciiHeader(s) {
     .trim();
 }
 
+// Tapping an alert at 3 a.m. should land on the booking page, not on a home
+// screen to be navigated half-asleep.
+const BOOKING_URL =
+  'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx';
+
+// One push is easy to sleep through, and a missed cancellation is the whole
+// failure mode this project exists to prevent. Urgent alerts are therefore
+// repeated: same message, a few times, a short gap apart. Three is enough to
+// beat a phone face-down on a nightstand without becoming its own problem.
+const URGENT_REPEATS = 3;
+const REPEAT_GAP_MS = 25_000;
+
 // ntfy.sh delivers a push to a phone with no account, given a topic name that
 // is unguessable enough to act as its own secret.
 async function pushNtfy(title, body, priority) {
   const topic = process.env.NTFY_TOPIC;
   if (!topic) return 'skipped (no NTFY_TOPIC)';
+  const urgent = priority === 'high';
   const send = (t) => fetch(`https://ntfy.sh/${topic}`, {
     method: 'POST',
     headers: {
       title: t.slice(0, 200),
-      priority: priority === 'high' ? 'urgent' : 'default',
-      tags: priority === 'high' ? 'ferry,tada' : 'ferry',
+      // 'urgent' is ntfy's top priority. On a phone that means it can ring
+      // through a silenced ringer, but only if the ntfy app itself has been
+      // allowed to: iOS needs notifications set to Time Sensitive, Android
+      // needs the channel exempted from Do Not Disturb. Nothing sent from
+      // this end can force that; it is a setting on the phone.
+      priority: urgent ? 'urgent' : 'default',
+      tags: urgent ? 'ferry,rotating_light' : 'ferry',
+      // Makes the notification itself a link straight to the search page.
+      click: BOOKING_URL,
     },
     body: body.slice(0, 3000),
   });
+
+  // Repeats go out after the first one has landed, and deliberately without
+  // being awaited: this is often called while a booking is in flight, and
+  // nothing here is allowed to slow that down or to throw into it.
+  if (urgent) {
+    (async () => {
+      for (let i = 1; i < URGENT_REPEATS; i++) {
+        await new Promise((r) => setTimeout(r, REPEAT_GAP_MS));
+        await send(asciiHeader(title)).catch(() => {});
+      }
+    })().catch(() => {});
+  }
 
   try {
     const res = await send(asciiHeader(title));

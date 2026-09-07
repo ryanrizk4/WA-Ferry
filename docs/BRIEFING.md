@@ -15,8 +15,7 @@ Anacortes**, for a car under 22 feet (under 7'2" tall).
 Acceptable sailings, in strict preference order:
 
 1. **Monday 14 Sept, 05:00–11:00** (preferred)
-2. **Sunday 13 Sept, 16:00–23:59** (fallback — they have Sunday night lodging
-   booked on Orcas, so they would rather not, but will)
+2. **Sunday 13 Sept, 16:00–23:59** (fallback — lodging is booked for Sunday night, so this is second choice)
 3. **Monday 14 Sept, 11:01–23:59** (last resort — bad for the itinerary, but
    getting off the island at all beats not getting off)
 
@@ -63,7 +62,7 @@ The first two waves for these dates have passed. The remaining opportunities:
 
 Plus cancellations, which appear at random and vanish in minutes.
 
-The user tried the last release manually, was on the site at the exact moment,
+A previous release was attempted manually, on the site at the exact moment,
 and it sold out immediately. That is the core problem to beat.
 
 ---
@@ -96,7 +95,7 @@ build a captcha bypass — solver service, fingerprint/stealth evasion, or hunti
 for an unprotected endpoint — on the grounds that the captcha is the operator's
 queue-fairness control and defeating it takes a scarce spot from other travellers
 queuing honestly. The user has pushed back on this twice. **If you disagree,
-say so plainly and explain your reasoning; the user wants to hear it.** But note
+say so plainly and explain your reasoning; we want to hear it.** But note
 the factual finding stands regardless: it is server-enforced, so nothing short of
 actually defeating it will book automatically.
 
@@ -139,13 +138,13 @@ Recorded so you do not have to rediscover them:
 
 ## 5. What has been built
 
-Node + Playwright, running on GitHub Actions, repo `ryanrizk4/WA-Ferry`.
+Node + Playwright, running on GitHub Actions, repo `the traveller/WA-Ferry`.
 
 | Piece | What it does | Status |
 |---|---|---|
 | `src/check.js` | Read-only "what is open right now" | Verified |
 | `src/book.js` | The watcher/sniper. Signs in, searches, alerts | Verified |
-| `src/local.js` | Same thing on the user's own laptop, visible browser, stops at the captcha | **Never run** |
+| `src/local.js` | Same thing on a local machine, visible browser, stops at the captcha | **Never run** |
 | `src/lib/flow.js` | Drives the ASP.NET form | Verified |
 | `src/lib/search.js` | Parses the sailing grid | Verified |
 | `src/lib/notify.js` | ntfy phone push + GitHub issue | Verified |
@@ -161,7 +160,7 @@ people's carts expire unpaid. Rehearsed end to end against a fake release time.
 the trip approaches (5 min now, 15 min inside 2 days, 40 min on the final day),
 checking every 45 seconds.
 
-**Alerting:** ntfy push to the user's phone, verified delivering.
+**Alerting:** ntfy push to the traveller's phone, verified delivering.
 
 ---
 
@@ -189,8 +188,7 @@ checking every 45 seconds.
 
 ## 7. Where a second opinion is wanted
 
-Be blunt. The user is anxious and has already been burned by confident wrong
-answers.
+Be blunt. Confident wrong answers have already cost us once here.
 
 1. **Is there a legitimate angle being missed?** Standby mechanics, phoning WSF
    (206-464-6400), a different route or terminal combination, travelling as a
