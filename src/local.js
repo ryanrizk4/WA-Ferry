@@ -24,7 +24,24 @@ import * as flow from './lib/flow.js';
 import { prepareSearch, findAvailability } from './lib/search.js';
 
 const args = process.argv.slice(2);
-const releaseAt = args.includes('--at') ? args[args.indexOf('--at') + 1] : null;
+const argValue = (name) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : null;
+};
+const releaseAt = argValue('--at');
+const windowAt = argValue('--window');
+if (releaseAt && windowAt) {
+  console.error('Use --at for an exact release or --window for a cancellation window, not both.');
+  process.exit(1);
+}
+
+// A cancellation deadline is not a release. Space can appear either side of it,
+// as people cancel just before the cutoff and as the site catches up after. So
+// a window is watched from twenty minutes before to twenty minutes after,
+// rather than sprinted from one exact second.
+const WINDOW_LEAD_MS = 20 * 60_000;
+const WINDOW_FOLLOW_MS = 20 * 60_000;
+const WINDOW_POLL_MS = 5_000;
 
 const PROFILE = '.browser-profile';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -107,6 +124,8 @@ if (releaseAt) {
 let pass = 0;
 let consecutiveFailures = 0;
 let lastHeartbeat = 0;
+let windowAnnounced = false;
+let windowClosed = false;
 
 for (;;) {
   pass += 1;
@@ -161,8 +180,11 @@ for (;;) {
     banner(`SPACE FOUND: ${pick.depart} on ${pick.date} (${pick.label})\n`
       + `Selecting it now. Then TICK THE CAPTCHA and press ADD TO CART.`);
 
-    // Fire the phone push too, in case you stepped away from the laptop.
-    await notify({
+    // Start the phone push but do not wait on it. The browser is already open
+    // on the right page, so selecting the sailing is worth more than the
+    // notification, and a slow or failing ntfy must never delay the click or
+    // take the run down with it.
+    const push = notify({
       title: `GO NOW: ${pick.depart} on ${pick.date} is open`,
       body: `The browser on your laptop is already on this sailing. Tick the `
         + `captcha and press Add to Cart.`,
@@ -177,6 +199,8 @@ for (;;) {
       log('do it by hand in the open window, it is on the right page');
     }
 
+    await push;
+
     banner('OVER TO YOU. Tick "I am not a robot", then Add to Cart.\n'
       + 'This window stays open. Nothing else will be clicked for you.');
     // Deliberately stop. Anything further would be a machine answering a
@@ -184,9 +208,23 @@ for (;;) {
     break;
   }
 
-  const gap = releaseAt && msUntil(releaseAt) > -limits.sprintHardMs
-    ? limits.sprintPollMs
-    : limits.idlePollMs;
-  if (pass % 10 === 1 || releaseAt) log(`check ${pass}: nothing yet`);
+  const releaseSprint = releaseAt && msUntil(releaseAt) > -limits.sprintHardMs;
+  const offset = windowAt ? msUntil(windowAt) : null;
+  const inWindow = windowAt && offset <= WINDOW_LEAD_MS && offset >= -WINDOW_FOLLOW_MS;
+
+  if (inWindow && !windowAnnounced) {
+    windowAnnounced = true;
+    banner(`CANCELLATION WINDOW OPEN around ${windowAt} Pacific.\n`
+      + `Checking every ${WINDOW_POLL_MS / 1000}s until 20 minutes past.`);
+  }
+  if (windowAnnounced && !inWindow && !windowClosed) {
+    windowClosed = true;
+    log('window over; back to the normal watching pace');
+  }
+
+  const gap = releaseSprint ? limits.sprintPollMs
+    : inWindow ? WINDOW_POLL_MS
+      : limits.idlePollMs;
+  if (pass % 10 === 1 || releaseAt || inWindow) log(`check ${pass}: nothing yet`);
   await sleep(gap);
 }
