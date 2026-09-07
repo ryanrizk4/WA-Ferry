@@ -10,7 +10,14 @@ name: Snipe reservation release
 # remaining time and sprints at the exact second.
 on:
   schedule:
-    - cron: '30 13 11,12 9 *'   # 06:30 PT — 30 minutes of headroom for cron drift
+    # Two entries on purpose. This fires exactly twice in its life and there
+    # is no second chance, and GitHub is known to drop scheduled runs under
+    # load. Either one is enough: the script idles until two minutes before
+    # the release regardless of when it started, and the concurrency group
+    # keeps them from overlapping. A duplicate that starts after the release
+    # has passed exits on its own without booking anything.
+    - cron: '25 13 11,12 9 *'   # 06:25 PT
+    - cron: '35 13 11,12 9 *'   # 06:35 PT
   workflow_dispatch:
     inputs:
       dry_run:
