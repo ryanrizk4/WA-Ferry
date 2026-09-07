@@ -14,7 +14,8 @@ const PAGES = [
   'https://wsdot.wa.gov/travel/washington-state-ferries/vehicle-reservations',
   'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/Default.aspx',
   'https://wsdot.wa.gov/ferries/tickets/refunds',
-  'https://secureapps.wsdot.wa.gov/Ferries/Reservations/vehicle/shared/Save_a_Spot_FAQs.pdf',
+  'https://wsdot.wa.gov/travel/washington-state-ferries/ferry-reservations',
+  'https://wsdot.wa.gov/ferries/tickets/ticket-information',
 ];
 
 // Sentences that could carry the deadline.
@@ -34,6 +35,17 @@ try {
       const resp = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
       if (!resp?.ok()) { console.log(`  http ${resp?.status()}`); continue; }
       await page.waitForTimeout(1500);
+
+      // The answer is likely inside a collapsed FAQ accordion, whose text is
+      // not in innerText until it is opened. Open everything first.
+      await page.evaluate(() => {
+        for (const d of document.querySelectorAll('details')) d.open = true;
+        const clickable = document.querySelectorAll(
+          '[aria-expanded="false"], .accordion-toggle, .accordion-button, summary',
+        );
+        for (const el of clickable) { try { el.click(); } catch { /* ignore */ } }
+      }).catch(() => {});
+      await page.waitForTimeout(2000);
 
       const text = await page.evaluate(() => document.body?.innerText || '');
       const sentences = text.split(/(?<=[.!?])\s+|\n+/).map((x) => x.replace(/\s+/g, ' ').trim());

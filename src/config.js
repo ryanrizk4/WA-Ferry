@@ -73,11 +73,27 @@ export const limits = {
   // budget goes where the odds are rather than being spread evenly across a
   // week of nothing.
   idlePollMs: 45_000,
+
+  // How long each triggered run keeps looking.
+  //
+  // Sized for how unreliably the trigger fires, not for how often we would
+  // like to check. GitHub's scheduler managed two runs in ten hours against a
+  // every-fifteen-minutes cron, so a run that checks once and quits would
+  // cover seconds out of a day. Each run therefore holds the line for a while,
+  // and the concurrency group makes a newer run supersede an older one so
+  // overlapping triggers cost nothing extra.
+  // Tiered so the expensive setting only applies near the trip. Two schedules
+  // now trigger this, and a newer run cancels an older one, so whenever the
+  // trigger interval is shorter than the run length the watcher is effectively
+  // running continuously. That is affordable for a day and not for a week,
+  // hence the steep taper. Roughly 1,900 Actions minutes across the week in
+  // the worst case, against a 2,000 monthly allowance.
   watchWindows: [
-    { withinHours: 24, runForMs: 15 * 60_000 },   // final day: watch most of the hour
-    { withinHours: 48, runForMs: 5 * 60_000 },
-    { withinHours: Infinity, runForMs: 0 },       // further out: one look and out
+    { withinHours: 24, runForMs: 40 * 60_000 },   // final day: near-continuous
+    { withinHours: 48, runForMs: 15 * 60_000 },
+    { withinHours: Infinity, runForMs: 5 * 60_000 },
   ],
+
   // Gap between checks during a release. The first minute is where a release
   // is won or lost, so poll hard then and ease off after: a steady one request
   // a second for half an hour is both rude and pointless once the rush clears.

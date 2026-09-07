@@ -1,18 +1,26 @@
-name: Watch for cancellations
+name: Watch for cancellations (second schedule)
 
+# A duplicate of the watch schedule on a different cron, because GitHub's
+# scheduler dropped almost every firing of the first one: two runs in ten hours
+# against an every-fifteen-minutes cron. Two independent schedules give two
+# chances that any given slot actually fires.
+#
+# This costs nothing extra. Both share the wsf-watch concurrency group, so a
+# run started by either supersedes any run already going rather than adding to
+# it. Original note follows.
+#
 # Between release waves, space reappears when other people cancel, and it does
-# not last: a sailing seen open on one check was gone six minutes later. Every
-# fifteen minutes is the compromise — tight enough to catch those, loose enough
+# not last: a sailing seen open on one check was gone six minutes later — tight enough to catch those, loose enough
 # to stay polite to a public agency's servers and to fit the Actions minutes
 # budget on a private repo (roughly 100 runs a day).
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    - cron: '8,23,38,53 * * * *'
   # Independent of GitHub's scheduler, which has not fired once here.
   # Touching .watch-trigger runs a check.
   push:
     branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
-    paths: ['src/**', '.github/workflows/watch.yml', '.watch-trigger']
+    paths: ['.watch-trigger-2']
   workflow_dispatch:
 
 # Separate from the snipe group: a watch tick must never queue behind a
@@ -22,7 +30,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  watch:
+  watch2:
     runs-on: ubuntu-latest
     timeout-minutes: 50
     permissions:
