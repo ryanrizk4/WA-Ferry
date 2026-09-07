@@ -16,8 +16,14 @@ on:
     # the release regardless of when it started, and the concurrency group
     # keeps them from overlapping. A duplicate that starts after the release
     # has passed exits on its own without booking anything.
-    - cron: '20 13 11,12 9 *'   # 06:20 PT
-    - cron: '30 13 11,12 9 *'   # 06:30 PT
+    # The two 7 a.m. releases.
+    - cron: '20 13 11,12 9 *'   # 06:20 PT Sept 11 and 12
+    - cron: '30 13 11,12 9 *'   # 06:30 PT Sept 11 and 12
+    # The two 5 p.m. cancellation deadlines the day before each sailing date.
+    # 17:00 PT is 00:00 UTC the following day, so these are dated the 13th and
+    # 14th in UTC while landing on the afternoon of the 12th and 13th Pacific.
+    - cron: '20 23 12,13 9 *'   # 16:20 PT Sept 12 and 13
+    - cron: '30 23 12,13 9 *'   # 16:30 PT Sept 12 and 13
   # Independent of GitHub's scheduler. Touching this file starts a snipe run,
   # which gives a second, unrelated way to fire at 7 a.m. if cron does not.
   push:

@@ -172,8 +172,13 @@ async function main() {
     // beforehand, the whole job at 7:00:00 is Refresh, click the sailing,
     // tick the box. So tell the human to get into position now.
     await notify({
-      title: `Ferry release in ${Math.round(msUntil(release.at) / 60000)} minutes - get set up now`,
-      body: `${release.wave}, at 7:00:00 a.m. Pacific.\n\n`
+      title: `Ferry ${release.kind === 'cancellation' ? 'cancellation window' : 'release'} in `
+        + `${Math.round(msUntil(release.at) / 60000)} minutes - get set up now`,
+      body: `${release.wave}, at ${release.at.slice(11, 16)} Pacific.\n\n`
+        + (release.kind === 'cancellation'
+          ? `This is the penalty-free cancellation cutoff the day before travel. `
+            + `People who are not going give their space back around now.\n\n`
+          : '')
         + `Open this on your phone or laptop right now and set it up, so at 7:00 `
         + `all you have to do is hit Refresh:\n\n`
         + `https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx\n\n`

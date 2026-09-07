@@ -56,8 +56,24 @@ export const stopAfter = '2026-09-14T23:59:00';
 //
 // All times are America/Los_Angeles.
 export const releases = [
-  { at: '2026-09-11T07:00:00', wave: 'two-day release for Sunday Sept 13' },
-  { at: '2026-09-12T07:00:00', wave: 'two-day release for Monday Sept 14' },
+  { at: '2026-09-11T07:00:00', kind: 'release', wave: 'two-day release for Sunday Sept 13' },
+  { at: '2026-09-12T07:00:00', kind: 'release', wave: 'two-day release for Monday Sept 14' },
+
+  // The other kind of moment worth being awake for, and possibly the better
+  // one. WSF's own FAQ tells people to check the site the day before their
+  // preferred sailing, "which is when people can cancel without a no-show
+  // fee". So there is a penalty-free cancellation cutoff the day before, and
+  // people who know they are not travelling give their space back before it.
+  //
+  // Space comes back across that whole day, not in one burst: someone who
+  // cancels at ten in the morning has dodged the fee just as well as someone
+  // who cancels at five. The peak is worth sprinting at, but the day around it
+  // is worth watching hard too, which the watch taper handles separately.
+  //
+  // Fewer people know to look here than at 7 a.m., which is exactly what makes
+  // it valuable.
+  { at: '2026-09-12T17:00:00', kind: 'cancellation', wave: 'cancellation deadline for Sunday Sept 13' },
+  { at: '2026-09-13T17:00:00', kind: 'cancellation', wave: 'cancellation deadline for Monday Sept 14' },
 ];
 
 // Politeness and safety limits. These are not negotiable knobs to crank: WSF
@@ -89,7 +105,7 @@ export const limits = {
   // hence the steep taper. Roughly 1,900 Actions minutes across the week in
   // the worst case, against a 2,000 monthly allowance.
   watchWindows: [
-    { withinHours: 24, runForMs: 40 * 60_000 },   // final day: near-continuous
+    { withinHours: 24, runForMs: 45 * 60_000 },   // the day-before days
     { withinHours: 48, runForMs: 15 * 60_000 },
     { withinHours: Infinity, runForMs: 5 * 60_000 },
   ],
