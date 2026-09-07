@@ -7,11 +7,18 @@ name: Dress rehearsal
 #
 # Nothing is booked: it takes the same path as a real run, and a real run
 # stops at the captcha anyway.
+#
+# Run on request only. It used to trigger on any edit to this file, which meant
+# a routine change fired a rehearsal against a hardcoded date that had long
+# since passed, and the traveller's phone announced "Ferry release in -199
+# minutes" over and over. A rehearsal is something you choose to run.
 on:
-  push:
-    branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
-    paths: ['.github/workflows/rehearsal.yml']
   workflow_dispatch:
+    inputs:
+      release_at:
+        description: 'Pacific time to rehearse against, e.g. 2026-09-08T07:00:00. Must be in the near future.'
+        required: true
+        type: string
 
 jobs:
   rehearsal:
@@ -33,7 +40,7 @@ jobs:
         env:
           MODE: snipe
           DRY_RUN: 'false'
-          TEST_RELEASE_AT: '2026-09-07T09:08:00'
+          TEST_RELEASE_AT: ${{ inputs.release_at }}
           TEST_SPRINT_MS: '120000'
           WSF_EMAIL: ${{ secrets.WSF_EMAIL }}
           WSF_PASSWORD: ${{ secrets.WSF_PASSWORD }}

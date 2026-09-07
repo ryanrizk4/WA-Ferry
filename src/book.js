@@ -40,8 +40,20 @@ function currentRelease() {
   // needs to have been run at least once before then.
   const fake = process.env.TEST_RELEASE_AT;
   if (fake) {
+    const ms = msUntil(fake);
+    // A rehearsal time that has already passed is not a rehearsal, it is a
+    // false alarm. This exact thing woke the traveller with "Ferry release in
+    // -199 minutes - get set up now", over and over: the rehearsal workflow
+    // had a hardcoded date, the date went stale, and editing that workflow
+    // re-triggered it. Refuse rather than announce nonsense.
+    if (ms < -60_000) {
+      log(`REHEARSAL IGNORED: TEST_RELEASE_AT is ${fake} PT, which was `
+        + `${Math.round(-ms / 60000)} minutes ago. Set it to a time in the near `
+        + `future to rehearse.`);
+      return null;
+    }
     log(`REHEARSAL: treating ${fake} PT as the release`);
-    return { at: fake, wave: 'dress rehearsal (not a real release)', ms: msUntil(fake) };
+    return { at: fake, wave: 'dress rehearsal (not a real release)', ms };
   }
   const candidates = releases
     .map((r) => ({ ...r, ms: msUntil(r.at) }))
@@ -267,7 +279,11 @@ async function main() {
         + `Then wait on that page. At 7:00:00 press Refresh, and I will text you `
         + `which sailing opened the instant I see it. Click that one, tick the `
         + `captcha, Add to Cart.`,
-      priority: 'high',
+      // Deliberately NOT the full alarm. The six-minute, twenty-four-buzz
+      // treatment is for a sailing that is open right now and can be taken.
+      // A "get ready" message that behaves like an emergency is how an alert
+      // people must not ignore becomes one they mute.
+      priority: 'urgent-once',
       issue: false,
     });
 
@@ -279,7 +295,7 @@ async function main() {
         body: 'Sixty seconds. Have the sailing list open with the route, date and '
           + 'vehicle already set. Press Refresh right on the hour, and watch for my '
           + 'next message naming the sailing.',
-        priority: 'high',
+        priority: 'urgent-once',
         issue: false,
       });
     }

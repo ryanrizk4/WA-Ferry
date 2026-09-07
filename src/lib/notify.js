@@ -85,7 +85,13 @@ const CALL_NUMBER = process.env.NTFY_CALL_NUMBER;
 async function pushNtfy(title, body, priority) {
   const topic = process.env.NTFY_TOPIC;
   if (!topic) return 'skipped (no NTFY_TOPIC)';
-  const urgent = priority === 'high';
+  // Three levels, and the difference matters more than it looks.
+  //   high        - a sailing is open NOW: full alarm, repeats, phone call.
+  //   urgent-once - important and time-sensitive, but nothing to click yet:
+  //                 one loud push, no repeats, no call.
+  //   normal      - a record, not an interruption.
+  const alarm = priority === 'high';
+  const urgent = alarm || priority === 'urgent-once';
   const send = (t, extra = {}) => fetch(`https://ntfy.sh/${topic}`, {
     method: 'POST',
     headers: {
@@ -107,14 +113,14 @@ async function pushNtfy(title, body, priority) {
   // Ring the phone once, on the first urgent push only. Repeated calls would
   // be worse than useless: the phone is engaged while it rings, which is
   // exactly when somebody is trying to use it to book.
-  if (urgent && CALL_NUMBER) {
+  if (alarm && CALL_NUMBER) {
     send(asciiHeader(title), { 'x-call': CALL_NUMBER }).catch(() => {});
   }
 
   // Repeats go out after the first one has landed, and deliberately without
   // being awaited: this is often called while a booking is in flight, and
   // nothing here is allowed to slow that down or to throw into it.
-  if (urgent) {
+  if (alarm) {
     const mine = ++repeatGeneration;
     (async () => {
       for (let i = 1; i < URGENT_REPEATS; i++) {
