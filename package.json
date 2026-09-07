@@ -5,7 +5,6 @@
   "type": "module",
   "description": "Watches for and books Washington State Ferries vehicle reservations on the Anacortes/San Juan Islands route.",
   "scripts": {
-    "recon": "node src/recon.js",
     "check": "node src/check.js",
     "book": "node src/book.js"
   },

@@ -77,6 +77,7 @@ you do not turn up or cancel late).
 | `src/lib/booking.js` | Selects a sailing and checks out. Stops at any captcha. |
 | `src/lib/time.js` | Pacific time. Getting this wrong by an hour means missing the wave. |
 | `src/lib/notify.js` | Tells you what happened. |
+| `src/lib/state.js` | Stands the whole thing down once a reservation exists. |
 
 ## Notes on the site
 
