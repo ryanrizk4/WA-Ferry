@@ -30,16 +30,26 @@ export const START_URL =
   'https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx';
 const HOME_MAKE_RESERVATION = '#linkBtnContinue';
 
-// WebForms answers a partial postback before the DOM settles, so waiting on
-// the response alone is not enough; give the UpdatePanel a beat to swap in.
-async function settle(page, ms = 1200) {
-  await page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {});
+// Waiting for the UpdatePanel to finish its partial postback.
+//
+// Do NOT use networkidle here. These pages hold open analytics beacons to
+// Google and Azure that never go quiet, so networkidle burns its full timeout
+// on every single step — around a hundred wasted seconds per search, which is
+// the difference between winning a 7 a.m. release and missing it.
+//
+// ASP.NET AJAX tells us directly whether a postback is in flight, so ask it.
+async function settle(page, ms = 250) {
+  await page.waitForFunction(() => {
+    const prm = window.Sys?.WebForms?.PageRequestManager;
+    if (!prm) return true; // no AJAX on this page; nothing to wait for
+    return !prm.getInstance().get_isInAsyncPostBack();
+  }, null, { timeout: 20000 }).catch(() => {});
   await page.waitForTimeout(ms);
 }
 
 export async function openSearch(page) {
   await page.goto(START_URL, { waitUntil: 'networkidle', timeout: 60000 });
-  await settle(page, 500);
+  await settle(page);
 
   // A cookie check or session timeout can bounce us back to the home page.
   // If that happens, click through rather than failing the run.
@@ -48,7 +58,7 @@ export async function openSearch(page) {
     const home = await page.locator(HOME_MAKE_RESERVATION).count();
     if (home) {
       await page.click(HOME_MAKE_RESERVATION);
-      await settle(page, 1500);
+      await settle(page);
     }
   }
   await page.waitForSelector(F.fromTerm, { timeout: 20000 });
@@ -88,20 +98,20 @@ export async function setDate(page, mmddyyyy) {
   }
   // Close any datepicker overlay so it cannot intercept the next click.
   await page.keyboard.press('Escape').catch(() => {});
-  await settle(page, 800);
+  await settle(page);
   return page.inputValue(F.date).catch(() => '<unreadable>');
 }
 
 export async function setVehicle(page, lengthValue, heightValue) {
   await page.selectOption(F.vehicle, lengthValue);
-  await settle(page, 800);
+  await settle(page);
   await page.selectOption(F.height, heightValue).catch(() => {});
-  await settle(page, 800);
+  await settle(page);
 }
 
 export async function showAvailability(page) {
   await page.click(F.showAvailability, { timeout: 15000 });
-  await settle(page, 2000);
+  await settle(page, 600);
 }
 
 // Anything that looks like a bot check. Worth knowing about separately from a

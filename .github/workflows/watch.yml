@@ -1,0 +1,47 @@
+name: Watch for cancellations
+
+# Between release waves, space reappears when other people cancel. This is the
+# net that catches those. Interval is a deliberate compromise: tight enough to
+# be useful, loose enough to stay polite to a public agency's servers and
+# inside the Actions minutes budget on a private repo.
+on:
+  # Armed once the booker is verified end to end. Left disabled until then so
+  # it does not fire every 20 minutes against a script that is not ready.
+  # schedule:
+  #   - cron: '*/20 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: wsf-booking
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+
+      - name: Check availability and book anything that appears
+        env:
+          MODE: watch
+          DRY_RUN: ${{ vars.DRY_RUN || 'false' }}
+          WSF_EMAIL: ${{ secrets.WSF_EMAIL }}
+          WSF_PASSWORD: ${{ secrets.WSF_PASSWORD }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run book
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: watch-failure-${{ github.run_number }}
+          path: out/
+          retention-days: 7

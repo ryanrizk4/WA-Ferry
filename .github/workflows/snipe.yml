@@ -1,0 +1,54 @@
+name: Snipe reservation release
+
+# The two moments that matter. WSF releases the last 30% of standard vehicle
+# space at 7:00 a.m. Pacific, two days before each sailing date:
+#   Fri Sept 11 -> sailings on Sun Sept 13
+#   Sat Sept 12 -> sailings on Mon Sept 14
+#
+# Actions cron is queued, not precise: a job asked for at :00 can start several
+# minutes late. So these fire well early and the script itself waits out the
+# remaining time and sprints at the exact second.
+on:
+  schedule:
+    - cron: '40 13 11,12 9 *'   # 06:40 PT — 20 minutes of headroom for cron drift
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Fill everything in but stop before the final confirm
+        type: boolean
+        default: true
+
+concurrency:
+  group: wsf-booking
+  cancel-in-progress: false
+
+jobs:
+  snipe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+
+      - name: Wait for the release, then book
+        env:
+          MODE: snipe
+          DRY_RUN: ${{ inputs.dry_run || 'false' }}
+          WSF_EMAIL: ${{ secrets.WSF_EMAIL }}
+          WSF_PASSWORD: ${{ secrets.WSF_PASSWORD }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run book
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: snipe-${{ github.run_number }}
+          path: out/
+          retention-days: 14
