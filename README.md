@@ -34,22 +34,29 @@ Everything runs on GitHub Actions, so nothing has to stay open on a laptop.
 - **`watch`** polls at a gentle interval the rest of the time, for cancellations.
 - **`check`** is a read-only report of what is open. Safe to run anytime.
 
-## The captcha, and what it means
+## The captcha: settled, and it decides the design
 
-WSF puts Google reCAPTCHA on the booking step. This project **does not attempt
-to solve or evade it** — that is their anti-bot control and defeating it is out
-of scope on purpose.
+WSF puts Google reCAPTCHA on the booking step, and it is **enforced on the
+server, not just drawn on the page**. Tested directly: signed in as the account
+holder, selecting a sailing and pressing Add to Cart comes back with
 
-So there are two possible outcomes when space appears, and which one you get
-depends on something still being verified:
+> Verification Failed. You need to pass recaptcha challenge to Continue.
 
-1. **Signed-in sessions skip the captcha.** Then booking completes by itself.
-2. **The captcha applies even signed in.** Then the run stops at that point and
-   sends an urgent notification naming the exact sailing, with a link, within
-   seconds of the space appearing. A human finishes it.
+and the cart stays empty. Signing in does not skip it.
 
-Either way the hard part — noticing space the instant it exists, at 7 a.m. —
-is automated. Only the last tap might not be.
+This project **does not attempt to solve or evade that**. It is WSF's anti-bot
+control and defeating it is out of scope on purpose.
+
+So booking cannot be automated, and the design is built around that:
+
+- The bot does the part humans are bad at: watching continuously and being
+  awake at 7:00:00 a.m. to the second.
+- The instant it sees space, it sends the alert **before** trying anything
+  else, because the attempt is known to fail and the seconds belong to you.
+- You tick the captcha box and check out.
+
+A phone push is therefore not optional in practice. Email is too slow for a
+window measured in seconds.
 
 ## Setup
 

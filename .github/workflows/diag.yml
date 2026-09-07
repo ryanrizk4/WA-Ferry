@@ -2,10 +2,10 @@ name: Diagnose the captcha question
 
 # One-off: does a signed-in session still get the reCAPTCHA on the booking
 # step? Runs only when asked, never on a schedule.
+# Answered already: the captcha is enforced server-side even when signed in.
+# Kept for re-checking if WSF changes the flow, but no longer runs on pushes,
+# because each run puts a sailing in a cart for a moment.
 on:
-  push:
-    branches: [claude/orcas-anacortes-ferry-tickets-211jzp]
-    paths: ['src/diag.js', '.github/workflows/diag.yml']
   workflow_dispatch:
 
 jobs:

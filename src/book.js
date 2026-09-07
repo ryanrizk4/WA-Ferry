@@ -78,6 +78,16 @@ async function main() {
   }
   if (!prior.known) log(`could not confirm whether we already booked: ${prior.reason}`);
 
+  const channels = [
+    process.env.NTFY_TOPIC ? 'phone push (ntfy)' : null,
+    process.env.GITHUB_TOKEN && process.env.GITHUB_REPOSITORY ? 'GitHub issue' : null,
+  ].filter(Boolean);
+  log(`alert channels: ${channels.join(' + ') || 'NONE — an alert would go nowhere'}`);
+  if (!process.env.NTFY_TOPIC) {
+    log('  no NTFY_TOPIC set. Since WSF blocks automated booking behind a captcha,');
+    log('  a phone push is the only channel fast enough to be worth anything here.');
+  }
+
   log(`route: ${trip.from.name} -> ${trip.to.name}, car under 22 feet`);
   for (const t of trip.targets) log(`  target: ${t.label} ${t.date} ${t.earliest}-${t.latest}`);
 
@@ -157,6 +167,24 @@ async function main() {
         const pick = found[0];
         log(`pass ${pass}: SPACE FOUND — ${pick.date} ${pick.depart} (${pick.label}), ${pick.spacesText}`);
 
+        // Alert first, before anything else. WSF enforces a reCAPTCHA on the
+        // booking step server-side — it rejects with "You need to pass
+        // recaptcha challenge to Continue" and leaves the cart empty — so the
+        // booking attempt below is expected to fail and its only value is
+        // being wrong about that. The notification is the product, and every
+        // second it waits is a second of a window measured in seconds.
+        await notify({
+          title: `GO NOW: ${pick.depart} on ${pick.date} is open`,
+          body: `${pick.spacesText} on the ${pick.depart} sailing (${pick.vessel}), `
+            + `${trip.from.name} to ${trip.to.name}, ${pick.date} — ${pick.label}.\n\n`
+            + `Book it here, fast:\n`
+            + `https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx\n\n`
+            + `Orcas Island -> Anacortes, date ${pick.date}, vehicle under 22 feet, up to 7'2" tall.\n`
+            + `Pick ${pick.depart}, tick the "I'm not a robot" box, then Add to Cart and check out.\n\n`
+            + `WSF requires that captcha, so this part cannot be automated.`,
+          priority: 'high',
+        });
+
         if (DRY_RUN) {
           await notify({
             title: `Dry run: space open on ${pick.date} ${pick.depart}`,
@@ -181,37 +209,19 @@ async function main() {
           });
           return;
         }
-        // A captcha is not a retryable error — trying again just burns the
-        // seconds during which the space is still there. Hand it to a human
-        // immediately, with everything they need to finish in one tap.
+        // The expected outcome: WSF's captcha refused it. The alert is already
+        // sent, so there is nothing useful left to say and no point retrying —
+        // a second attempt fails identically and only burns the window.
         if (result.handoff) {
-          log(`pass ${pass}: handing off — ${result.reason}`);
-          await notify({
-            title: `GO NOW: ${pick.depart} on ${pick.date} is open`,
-            body: `Space opened on the ${pick.depart} sailing from ${trip.from.name} to `
-              + `${trip.to.name} on ${pick.date} (${pick.label}), vessel ${pick.vessel}.\n\n`
-              + `${result.reason}. You need to finish this by hand, and fast:\n\n`
-              + (auth.ok ? '' : `(Note: sign-in also failed — ${auth.reason})\n\n`)
-              + `https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx\n\n`
-              + `Orcas Island to Anacortes, ${pick.date}, vehicle under 22 feet, up to 7'2" tall. `
-              + `Pick the ${pick.depart} sailing.`,
-            priority: 'high',
-          });
+          log(`pass ${pass}: captcha refused it, as expected — ${result.reason}`);
           return;
         }
 
+        // Anything else is a surprise worth a second look, but the human has
+        // already been told to go, so keep it quiet and just record it.
         log(`pass ${pass}: booking attempt ${attempts} failed: ${result.reason}`);
-        if (attempts >= limits.maxBookingAttempts) {
-          await notify({
-            title: 'Space appeared but booking failed — go do it by hand now',
-            body: `Saw ${pick.spacesText} on ${pick.date} ${pick.depart} but could not complete `
-              + `the reservation after ${attempts} attempts.\n\nLast error: ${result.reason}\n`
-              + (auth.ok ? '' : `Sign-in also failed: ${auth.reason}\n`) + `\n`
-              + `Book manually: https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx`,
-            priority: 'high',
-          });
-          return;
-        }
+        if (!auth.ok) log(`  (sign-in had also failed: ${auth.reason})`);
+        if (attempts >= limits.maxBookingAttempts) return;
       } else {
         log(`pass ${pass}: nothing available`);
       }
