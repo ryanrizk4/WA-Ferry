@@ -92,9 +92,14 @@ export async function searchDate(page, isoDate, trip) {
 export async function findAvailability(page, trip) {
   if (!(await page.locator(flow.F.fromTerm).count())) await prepareSearch(page, trip);
 
+  // Two targets can share a date (Monday morning and late Monday), and the
+  // grid is the same either way. Search each date once per pass: it is a third
+  // fewer requests during a release, when we are hitting hardest.
+  const seen = new Map();
   const matches = [];
   for (const target of trip.targets) {
-    const res = await searchDate(page, target.date, trip);
+    if (!seen.has(target.date)) seen.set(target.date, await searchDate(page, target.date, trip));
+    const res = seen.get(target.date);
     if (!res.ok) {
       console.log(`  ${target.date}: ${res.reason}`);
       continue;
