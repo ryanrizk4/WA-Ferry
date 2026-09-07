@@ -39,6 +39,28 @@ function currentRelease() {
   return candidates[0] ?? null;
 }
 
+// One retry, because the failure that matters happens two minutes before a
+// release and a transient hiccup there costs the whole run.
+// Held at module scope so the top-level handler can close it even when the
+// failure happens before the main loop's own cleanup is in scope. Playwright
+// keeps the event loop alive, so an unclosed browser turns a crash into a hang
+// that runs until the job times out.
+let browser = null;
+
+async function withRetry(fn, what, attempts = 2) {
+  let last;
+  for (let i = 1; i <= attempts; i += 1) {
+    try {
+      return await fn();
+    } catch (e) {
+      last = e;
+      log(`${what}: attempt ${i} of ${attempts} failed — ${e.message.split('\n')[0]}`);
+      if (i < attempts) await sleep(2000);
+    }
+  }
+  throw last;
+}
+
 async function main() {
   log(`mode=${MODE} dryRun=${DRY_RUN} nowPT=${nowPT()}`);
 
@@ -81,7 +103,7 @@ async function main() {
     deadline = Date.now() + limits.sprintWindowMs;
   }
 
-  const browser = await chromium.launch();
+  browser = await chromium.launch();
   const ctx = await browser.newContext({ userAgent: UA, viewport: { width: 1440, height: 1200 } });
   const page = await ctx.newPage();
 
@@ -93,16 +115,19 @@ async function main() {
   // session skips the slowest part of checkout. A failed login is not fatal
   // here — better to keep looking and report honestly than to bail — but it
   // does mean booking will not complete, so say so loudly.
-  const auth = await flow.login(page, process.env.WSF_EMAIL, process.env.WSF_PASSWORD);
+  const auth = await withRetry(
+    () => flow.login(page, process.env.WSF_EMAIL, process.env.WSF_PASSWORD),
+    'sign in',
+  ).catch((e) => ({ ok: false, reason: `sign-in threw: ${e.message.split('\n')[0]}` }));
   log(`login: ${auth.ok ? 'OK' : 'FAILED'} — ${auth.reason}`);
-  // Deliberately not notifying here. The watch runs every twenty minutes and
+  // Deliberately not notifying here. The watch runs every fifteen minutes and
   // usually finds nothing, so a broken login would otherwise fire an alert on
   // every run for days. It only matters at the moment there is something to
   // take, so it is folded into the message sent then.
 
   // Load the search form and set everything that does not change, so the
   // moment the release lands we are one postback away from an answer.
-  await prepareSearch(page, trip);
+  await withRetry(() => prepareSearch(page, trip), 'prime the search form');
   log('search form primed: route and vehicle set');
 
   if (release) {
@@ -212,8 +237,26 @@ async function main() {
       });
     }
   } finally {
-    await browser.close();
+    await browser?.close();
+    browser = null;
   }
 }
 
-await main();
+// Nothing may fail quietly. A crash during warm-up would otherwise mean the
+// release passes with no reservation and no word about why.
+try {
+  await main();
+} catch (e) {
+  const detail = e?.stack?.split('\n').slice(0, 4).join('\n') ?? String(e);
+  console.error(detail);
+  await notify({
+    title: 'Ferry bot crashed — check it before the next release',
+    body: `The ${MODE} run failed before it could finish.\n\n${detail}\n\n`
+      + `Book by hand if a release is imminent: `
+      + `https://secureapps.wsdot.wa.gov/ferries/reservations/vehicle/SailingSchedule.aspx`,
+    priority: 'high',
+  }).catch(() => {});
+  process.exitCode = 1;
+} finally {
+  await browser?.close().catch(() => {});
+}
