@@ -57,7 +57,26 @@ async function launch() {
     return await chromium.launchPersistentContext(PROFILE, { ...opts, channel: 'chrome' });
   } catch {
     log('no system Chrome found, using the bundled browser instead');
-    return chromium.launchPersistentContext(PROFILE, opts);
+  }
+  try {
+    return await chromium.launchPersistentContext(PROFILE, opts);
+  } catch (e) {
+    // Plain English, because whoever is running this at 7 a.m. should not
+    // have to read a stack trace to find out a one-line command is missing.
+    const missingBrowser = /Executable doesn't exist|please run.*install/i.test(e.message);
+    console.error(`\n${'='.repeat(64)}`);
+    console.error('Could not open a browser window.\n');
+    if (missingBrowser) {
+      console.error('The browser has not been downloaded yet. Run this once:\n');
+      console.error('    npx playwright install chromium\n');
+      console.error('then start this again.');
+    } else {
+      console.error(`${e.message.split('\n')[0]}\n`);
+      console.error('If this machine has no desktop, run it somewhere with a screen:');
+      console.error('this needs a visible window so you can tick the captcha.');
+    }
+    console.error('='.repeat(64));
+    process.exit(1);
   }
 }
 
