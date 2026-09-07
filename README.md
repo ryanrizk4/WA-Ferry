@@ -112,6 +112,46 @@ thinner cover than intended, but it is cover. If GitHub's cron ever starts
 working the two simply run alongside each other, and the booking guard stops
 anything being taken twice.
 
+## Running it on your own laptop (the better option for a release)
+
+The cloud version can only tell you space appeared. This one does everything
+up to the captcha and stops with the page ready, so your whole job is to tick
+the box and press Add to Cart. Three seconds of work instead of forty.
+
+It also simply works better from home. reCAPTCHA weighs where a request comes
+from: a datacenter address gets the hard image grid almost every time, an
+ordinary home connection in an ordinary browser usually gets the one-click
+checkbox. Nothing here dodges the captcha, a person still solves it. It just
+runs where the person is.
+
+One-time setup:
+
+```
+git clone https://github.com/ryanrizk4/WA-Ferry && cd WA-Ferry
+npm install
+npx playwright install chromium
+```
+
+Then, in the same terminal:
+
+```
+export WSF_EMAIL="the email on your WSF account"
+export WSF_PASSWORD="the password"
+export NTFY_TOPIC="your ntfy topic"      # optional, pushes your phone too
+
+npm run local                                        # watch for cancellations
+npm run local -- --at "2026-09-11T07:00:00"          # wait for Sunday's release
+npm run local -- --at "2026-09-12T07:00:00"          # wait for Monday's release
+```
+
+A browser window opens and signs in. Leave it visible, and leave the laptop
+awake and plugged in. It beeps and prints in the terminal when it finds
+something, and it stops as soon as the sailing is selected. It will not click
+anything else for you.
+
+Run it as well as the cloud watcher, not instead of. They do not conflict:
+whichever sees space first, a human still completes the booking.
+
 ## Setup
 
 Repository secrets, under Settings → Secrets and variables → Actions:
