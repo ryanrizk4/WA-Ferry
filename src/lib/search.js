@@ -11,6 +11,7 @@
 // more space coming at the next release).
 
 import { inWindow } from './time.js';
+import { excludeSailings } from '../config.js';
 import * as flow from './flow.js';
 
 // The date box has maxlength=8 and accepts M/D/YY. A four-digit year is
@@ -113,6 +114,13 @@ export async function findAvailability(page, trip) {
       const hhmm = to24h(r.depart);
       if (!hhmm || !r.bookable) continue;
       if (!inWindow(hhmm, target.earliest, target.latest)) continue;
+      // Sailings the traveller has ruled out. Filtered here rather than in the
+      // watcher so it applies everywhere at once: the watch, the release
+      // snipers, the read-only check and the drill.
+      if (excludeSailings.some((x) => x.date === target.date && x.depart === r.depart)) {
+        console.log(`    (skipping ${r.depart} on ${target.date}: excluded by request)`);
+        continue;
+      }
       matches.push({ ...r, date: target.date, label: target.label, hhmm });
     }
   }

@@ -41,6 +41,20 @@ export const trip = {
 };
 
 // Nothing to do after this; the watch stops rather than polling forever.
+// Sailings never to alert about, even though they fall inside a wanted window.
+//
+// The 5:25 p.m. departures on both days were removed at the traveller's
+// request on 8 September, after they turned out to be far and away the noisiest
+// sailings on the route: five of the twelve alerts up to that point were
+// 5:25 p.m., and an alert for a boat you would not take is worse than no alert,
+// because it teaches you to ignore the next one.
+//
+// Times are exactly as the site prints them in the Depart column.
+export const excludeSailings = [
+  { date: '2026-09-13', depart: '5:25 PM' },
+  { date: '2026-09-14', depart: '5:25 PM' },
+];
+
 export const stopAfter = '2026-09-14T23:59:00';
 
 // When WSF drops new inventory. Their published rule for the Anacortes/San

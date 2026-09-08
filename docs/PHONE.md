@@ -109,9 +109,13 @@ Everything below is the same on both sites; only the layout differs.
 
 1. **Monday 14 Sept, 05:00-11:00** — the goal. Sailings in range: 7:05 AM,
    8:50 AM.
-2. **Sunday 13 Sept, 16:00-23:59** — the fallback. 5:25 PM, 9:25 PM, 10:45 PM.
+2. **Sunday 13 Sept, 16:00-23:59** — the fallback. 9:25 PM, 10:45 PM.
 3. **Monday 14 Sept, 11:01-23:59** — last resort, but take it. 12:15 PM,
-   2:20 PM, 5:25 PM, 9:25 PM, 10:45 PM.
+   2:20 PM, 9:25 PM, 10:45 PM.
+
+**The 5:25 PM sailing on both days is excluded** and will not raise an alert,
+at the traveller's request. It was the noisiest sailing on the route by a wide
+margin, and an alert for a boat you would not take is worse than no alert.
 
 Take anything in group 1. If the alert is for group 2 or 3, take it anyway:
 the whole point of having a last resort is being able to get off the island.
