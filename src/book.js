@@ -308,6 +308,24 @@ async function main() {
     deadline = Date.now() + sprintWindowMs();
   }
 
+  // Put the browser back on a usable search form.
+  //
+  // A booking attempt navigates away: it selects a sailing, reaches the cart,
+  // and stops at the captcha. Whatever is on screen then is not the sailing
+  // list, so the next pass clicks into nothing and times out. Before the run
+  // learned to keep watching after a handoff this did not matter, because it
+  // exited immediately. Now it matters on every sighting, and the log showed
+  // it plainly: a captcha handoff at 03:31:32 was followed by two straight
+  // "page.click: Timeout" failures.
+  const reprime = async (why) => {
+    try {
+      await prepareSearch(page, trip);
+      log(`  re-primed the search form ${why}`);
+    } catch (e) {
+      log(`  could not re-prime ${why}: ${e.message.split('\n')[0]}`);
+    }
+  };
+
   let attempts = 0;
   let pass = 0;
   let consecutiveFailures = 0;
@@ -319,8 +337,17 @@ async function main() {
     do {
       pass += 1;
       let found = null;
+      // Whether the search actually completed. A search that THREW tells us
+      // nothing about availability, and must never be mistaken for one that
+      // ran and came back empty. Without this distinction a page timeout
+      // silences the alarm and reports the space gone while it is still
+      // sitting there: exactly what happened at 03:32 on 8 September, where a
+      // page.click timeout produced "SPACE GONE ... open for 5m 49s" for a
+      // sailing nobody had established was gone.
+      let searched = false;
       try {
         found = await findAvailability(page, trip);
+        searched = true;
         consecutiveFailures = 0;
       } catch (e) {
         consecutiveFailures += 1;
@@ -344,7 +371,8 @@ async function main() {
         }
       }
 
-      if (!found?.length) {
+      // Only a search that actually ran can tell us the space has gone.
+      if (searched && !found?.length) {
         // The space is gone. Call off any repeats still queued so the phone
         // stops buzzing about a chance that has passed, and let the next find
         // start a fresh alarm.
@@ -456,6 +484,7 @@ async function main() {
           attempts -= 1;
           log(`pass ${pass}: captcha refused it, as expected — ${result.reason}; `
             + `staying on it in case the space holds`);
+          await reprime('after the captcha handed off');
           if (Date.now() >= deadline) break;
           await sleep(MODE === 'watch' ? watchPollMs() : limits.sprintPollMs);
           continue;
@@ -465,6 +494,7 @@ async function main() {
         // already been told to go, so keep it quiet and just record it.
         log(`pass ${pass}: booking attempt ${attempts} failed: ${result.reason}`);
         if (!auth.ok) log(`  (sign-in had also failed: ${auth.reason})`);
+        await reprime('after a failed booking attempt');
         if (attempts >= limits.maxBookingAttempts) return;
       } else {
         log(`pass ${pass}: nothing available`);
