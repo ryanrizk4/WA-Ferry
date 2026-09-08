@@ -443,9 +443,22 @@ async function main() {
         // exact moment the space exists is backwards: the chance is live until
         // somebody books it, and every second of it deserves another push.
         // So keep watching, and keep alerting while it is still there.
+        //
+        // Critically, this does NOT count against maxBookingAttempts. That cap
+        // exists to stop a genuinely broken booking flow hammering WSF, and a
+        // captcha refusal is neither broken nor a real attempt: it is the
+        // expected outcome of every single sighting. Counting it meant a watch
+        // run quietly retired after its third sighting. That happened: run 56
+        // logged "staying on it in case the space holds" and then ended two
+        // minutes later on attempt 3, four hours into a five-and-a-half hour
+        // shift.
         if (result.handoff) {
+          attempts -= 1;
           log(`pass ${pass}: captcha refused it, as expected — ${result.reason}; `
             + `staying on it in case the space holds`);
+          if (Date.now() >= deadline) break;
+          await sleep(MODE === 'watch' ? watchPollMs() : limits.sprintPollMs);
+          continue;
         }
 
         // Anything else is a surprise worth a second look, but the human has
