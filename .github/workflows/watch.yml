@@ -48,6 +48,9 @@ jobs:
       # successor by dispatching this same workflow.
       actions: write
     steps:
+      - name: Note when this run started
+        run: date +%s > /tmp/run-started
+
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -58,7 +61,18 @@ jobs:
       # which lands in about twenty seconds every time. Predictability beats
       # a theoretical saving when the job has to work at an exact minute.
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        # Retried because this is a network fetch and it does fail. On
+        # 9 September it failed repeatedly, and since the hand-off fires no
+        # matter what, every failure immediately started another run: about
+        # 180 runs an hour, none of them watching anything.
+        run: |
+          for attempt in 1 2 3; do
+            if npx playwright install --with-deps chromium; then exit 0; fi
+            echo "Chromium install failed (attempt $attempt); retrying in 15s"
+            sleep 15
+          done
+          echo "Chromium install failed three times"
+          exit 1
 
       - name: Check availability and book anything that appears
         env:
@@ -140,6 +154,23 @@ jobs:
               exit 0
               ;;
           esac
+
+          # Never hand off faster than this. The hand-off is deliberately
+          # unconditional so a crash cannot end the watch, but that same
+          # property turns any fast, repeating failure into a hot loop. A run
+          # that lasted seconds waits here before starting its successor, so a
+          # broken state costs a few runs an hour instead of hundreds, and
+          # still heals itself the moment the underlying problem clears.
+          MIN_CYCLE=180
+          started=$(cat /tmp/run-started 2>/dev/null || echo 0)
+          now=$(date +%s)
+          elapsed=$(( now - started ))
+          if [ "$started" -gt 0 ] && [ "$elapsed" -lt "$MIN_CYCLE" ]; then
+            wait=$(( MIN_CYCLE - elapsed ))
+            echo "this run lasted only ${elapsed}s, which means something is failing fast."
+            echo "waiting ${wait}s before handing off, so this cannot become a hot loop."
+            sleep "$wait"
+          fi
 
           echo "handing off to the next watch run"
           code=$(curl -sS -o /tmp/dispatch.out -w '%{http_code}' -X POST \
