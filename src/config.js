@@ -13,53 +13,44 @@ export const trip = {
   // most reservable slots per sailing.
   vehicle: { lengthCategory: 'under-22', heightOver7ft: false, driverPlusPassengers: 1 },
 
-  // Sailings we would accept, best first. The booker walks this list in order
-  // and takes the first thing that is actually available, so a worse option
-  // still beats no option.
+  // Sailings we would accept, best first.
+  //
+  // The job changed on 9 September. Two reservations are now in hand, taken by
+  // hand off these alerts: Sunday 13th at 9:25 p.m., and Monday 14th at
+  // 7:05 a.m. Getting off the island is settled.
+  //
+  // So this is no longer a hunt for any seat. It is a narrow watch for the two
+  // sailings that would be an improvement on what is already held, and nothing
+  // else. Everything that is worse than, or equal to, a held reservation is
+  // silence now: an alert that cannot improve the trip only costs attention.
   //
   // Times are local Pacific, matched against the sailing's departure time.
   targets: [
     {
-      label: 'Monday morning (preferred)',
+      label: 'Monday 8:50 AM (better than the 7:05 AM already held)',
       date: '2026-09-14',
-      earliest: '05:00',
-      latest: '11:00',
+      earliest: '08:00',
+      latest: '09:30',
     },
     {
-      label: 'Sunday evening (fallback)',
+      label: 'Sunday 10:45 PM (better than the 9:25 PM already held)',
       date: '2026-09-13',
-      earliest: '16:00',
-      latest: '23:59',
-    },
-    {
-      label: 'Late Monday (last resort)',
-      date: '2026-09-14',
-      earliest: '11:01',
+      // 10:45 p.m. is 22:45, so the window has to open at 22:00, not 23:00.
+      // It still excludes the 9:25 p.m. (21:25) that is already held.
+      earliest: '22:00',
       latest: '23:59',
     },
   ],
 };
 
 // Nothing to do after this; the watch stops rather than polling forever.
-// Sailings never to alert about, even though they fall inside a wanted window.
+// Sailings never to alert about, even when they fall inside a wanted window.
 //
-// The 5:25 p.m. departures on both days were removed at the traveller's
-// request on 8 September, after they turned out to be far and away the noisiest
-// sailings on the route: five of the twelve alerts up to that point were
-// 5:25 p.m., and an alert for a boat you would not take is worse than no alert,
-// because it teaches you to ignore the next one.
-//
-// Times are exactly as the site prints them in the Depart column.
-export const excludeSailings = [
-  { date: '2026-09-13', depart: '5:25 PM' },
-  { date: '2026-09-14', depart: '5:25 PM' },
-  // 2:20 p.m. removed 9 September, same reasoning. The Sunday entry is
-  // belt and braces: 2:20 p.m. falls outside the Sunday window anyway, so it
-  // could never have alerted, but listing it means widening that window later
-  // cannot quietly bring it back.
-  { date: '2026-09-13', depart: '2:20 PM' },
-  { date: '2026-09-14', depart: '2:20 PM' },
-];
+// Empty now, and that is not an oversight. The two target windows above are
+// narrow enough that the rejected departures (5:25 p.m. and 2:20 p.m. on both
+// days) cannot match anything. This stays as the place to rule a sailing out
+// if a window is ever widened again.
+export const excludeSailings = [];
 
 export const stopAfter = '2026-09-14T23:59:00';
 
