@@ -53,6 +53,12 @@ export const trip = {
 export const excludeSailings = [
   { date: '2026-09-13', depart: '5:25 PM' },
   { date: '2026-09-14', depart: '5:25 PM' },
+  // 2:20 p.m. removed 9 September, same reasoning. The Sunday entry is
+  // belt and braces: 2:20 p.m. falls outside the Sunday window anyway, so it
+  // could never have alerted, but listing it means widening that window later
+  // cannot quietly bring it back.
+  { date: '2026-09-13', depart: '2:20 PM' },
+  { date: '2026-09-14', depart: '2:20 PM' },
 ];
 
 export const stopAfter = '2026-09-14T23:59:00';
