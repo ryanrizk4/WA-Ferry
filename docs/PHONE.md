@@ -1,5 +1,20 @@
 # Booking from a phone
 
+> **Retired 10 September 2026. The trip is booked and the watch is switched
+> off.** Everything below was written for the scramble that is no longer
+> coming, and is kept only as a record of how the site behaves. One thing on
+> this page is still live and still has a deadline:
+>
+> **Both legs off Orcas are reserved, and only one of them will be used. The
+> other has to be cancelled or it earns a no-show fee, quoted at $16.**
+> Penalty-free cancellation closes at **5:00 p.m. Pacific the day before the
+> sailing**, so the Sunday reservation must be cancelled by 5 p.m. Saturday
+> the 12th, and the Monday one by 5 p.m. Sunday the 13th. Nothing can be
+> changed or cancelled inside two hours of a sailing.
+>
+> Cancel it in the WSF account under existing reservations. No alert is coming
+> to remind you; the alerting is gone.
+
 There will be no laptop on this trip. When the alert arrives, the whole
 booking has to happen on a phone, against a clock, possibly at three in the
 morning. This is the plan for that, worked out in advance so none of it is
